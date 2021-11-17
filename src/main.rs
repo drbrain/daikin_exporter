@@ -10,11 +10,12 @@ use reqwest::Client;
 use std::collections::HashMap;
 use std::net::SocketAddr;
 
+mod configuration;
+use configuration::Configuration;
+
 type DaikinResponse = Result<HashMap<String, String>, reqwest::Error>;
 
-fn new_client() -> Client {
-    let timeout = std::time::Duration::from_millis(250);
-
+fn new_client(timeout: std::time::Duration) -> Client {
     Client::builder()
         .connect_timeout(timeout)
         .http1_only()
@@ -74,11 +75,14 @@ async fn get_control_info(client: &Client, addr: &str) -> DaikinResponse {
 async fn main() {
     Builder::from_env(Env::default().default_filter_or("info")).init();
 
-    let addr_raw = "0.0.0.0:9150";
+    let configuration = Configuration::load_from_next_arg();
+
+    let addr_raw = configuration.bind_address();
     let addr: SocketAddr = addr_raw.parse().expect("can not parse listen addr");
 
     let exporter = prometheus_exporter::start(addr).expect("can not start exporter");
-    let update_interval = std::time::Duration::from_millis(2000);
+
+    let update_interval = configuration.interval();
 
     let set_point_degrees = register_gauge_vec!(
         "daikin_set_point_degrees",
@@ -87,7 +91,7 @@ async fn main() {
     )
     .unwrap();
 
-    let client = new_client();
+    let client = new_client(configuration.timeout());
 
     loop {
         let _guard = exporter.wait_duration(update_interval);

@@ -4,9 +4,11 @@ version = "0.1.0"
 edition = "2018"
 
 [dependencies]
+env_logger          = "0.9"
+log                 = "0.4"
 prometheus_exporter = "0.8"
-env_logger = "0.9"
-log = "0.4"
-reqwest = { version = "0.11",features = ["blocking"] }
-tokio = { version = "1.14.0", features = ["full"] }
+reqwest             = { version = "0.11",features = ["blocking"] }
+serde               = { version = "^1.0", features = ["derive"] }
+tokio               = { version = "1.14.0", features = ["full"] }
+toml                = "0.5.8"
 
