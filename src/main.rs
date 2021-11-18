@@ -18,6 +18,18 @@ use reqwest::Client;
 use std::net::SocketAddr;
 use std::time::Duration;
 
+macro_rules! set_metric {
+    ($info: expr, $device_name:expr, $metric_name:expr) => {
+        if let Some(value) = $info.get(stringify!($metric_name)) {
+            let metric_value: f64 = value.parse().unwrap();
+
+            $metric_name
+                .with_label_values(&[&$device_name])
+                .set(metric_value);
+        }
+    };
+}
+
 fn new_client(timeout: Duration) -> Client {
     Client::builder()
         .connect_timeout(timeout)
@@ -69,9 +81,40 @@ async fn main() {
 
     let exporter = new_exporter(configuration.bind_address());
 
-    let set_point_degrees = register_gauge_vec!(
-        "daikin_set_point_degrees",
+    let power_on =
+        register_gauge_vec!("daikin_power_on", "Daikin unit is on", &["device"]).unwrap();
+
+    let mode = register_gauge_vec!(
+        "daikin_mode",
+        "Daikin mode (0, 1, 7 auto, 2 dehumidify, 3 cool, 4 heat, 6 fan)",
+        &["device"]
+    )
+    .unwrap();
+
+    let set_humid = register_gauge_vec!(
+        "daikin_set_humidity_relative",
+        "Humidity set-point",
+        &["device"]
+    )
+    .unwrap();
+
+    let set_temp = register_gauge_vec!(
+        "daikin_set_temperature_degrees",
         "Temperature set-point",
+        &["device"]
+    )
+    .unwrap();
+
+    let fan_rate = register_gauge_vec!(
+        "daikin_fan_rate",
+        "Daikin fan rate (1 auto, 2 silence, 3–7 level 1–5)",
+        &["device"]
+    )
+    .unwrap();
+
+    let fan_dir = register_gauge_vec!(
+        "daikin_fan_direction",
+        "Daikin fan direction (0 stopped, 1 vertical, 2 horizontal, 3 both)",
         &["device"]
     )
     .unwrap();
@@ -90,13 +133,12 @@ async fn main() {
                 }
             };
 
-            if let Some(set_point) = info.get("set_point") {
-                let set_point: f64 = set_point.parse().unwrap();
-
-                set_point_degrees
-                    .with_label_values(&[&device_name])
-                    .set(set_point);
-            }
+            set_metric!(info, device_name, power_on);
+            set_metric!(info, device_name, mode);
+            set_metric!(info, device_name, set_humid);
+            set_metric!(info, device_name, set_temp);
+            set_metric!(info, device_name, fan_rate);
+            set_metric!(info, device_name, fan_dir);
 
             debug!("Updated metrics for {} ({})", device_name, adaptor.host);
         }

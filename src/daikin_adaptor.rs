@@ -48,6 +48,7 @@ impl DaikinAdaptor {
         };
 
         let device_name = decode(basic_info.get("name").unwrap());
+        let power_on = basic_info.get("pow").unwrap().to_string();
 
         let control_info = match get_control_info(&client, &self.host).await {
             Ok(i) => i,
@@ -57,12 +58,29 @@ impl DaikinAdaptor {
             }
         };
 
-        let set_point = control_info.get("stemp").unwrap().to_string();
+        let set_temp = control_info.get("stemp").unwrap().to_string();
+        let set_humid = control_info.get("shum").unwrap().to_string();
+        let mode = control_info.get("mode").unwrap().to_string();
+        let mut fan_rate = control_info.get("f_rate").unwrap().to_string();
+
+        if fan_rate == "A" {
+            fan_rate = "1".to_string();
+        } else if fan_rate == "B" {
+            fan_rate = "2".to_string();
+        }
+
+        let fan_dir = control_info.get("f_dir").unwrap().to_string();
 
         let mut info = self.info.lock().await;
 
         info.insert("device_name".to_string(), device_name);
-        info.insert("set_point".to_string(), set_point);
+        info.insert("power_on".to_string(), power_on);
+
+        info.insert("mode".to_string(), mode);
+        info.insert("set_temp".to_string(), set_temp);
+        info.insert("set_humid".to_string(), set_humid);
+        info.insert("fan_rate".to_string(), fan_rate);
+        info.insert("fan_dir".to_string(), fan_dir);
     }
 }
 
