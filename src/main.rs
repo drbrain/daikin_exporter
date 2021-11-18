@@ -1,21 +1,24 @@
+mod configuration;
+mod daikin_adaptor;
+
+use configuration::Configuration;
+use daikin_adaptor::DaikinAdaptor;
+
 use env_logger::Builder;
 use env_logger::Env;
 
 use log::debug;
+use log::info;
 
 use prometheus_exporter::prometheus::register_gauge_vec;
+use prometheus_exporter::Exporter;
 
 use reqwest::Client;
 
-use std::collections::HashMap;
 use std::net::SocketAddr;
+use std::time::Duration;
 
-mod configuration;
-use configuration::Configuration;
-
-type DaikinResponse = Result<HashMap<String, String>, reqwest::Error>;
-
-fn new_client(timeout: std::time::Duration) -> Client {
+fn new_client(timeout: Duration) -> Client {
     Client::builder()
         .connect_timeout(timeout)
         .http1_only()
@@ -24,51 +27,35 @@ fn new_client(timeout: std::time::Duration) -> Client {
         .expect("Could not build client")
 }
 
-fn decode(encoded: &String) -> String {
-    let mut encoded = encoded.split("%");
+fn new_exporter(bind_address: String) -> Exporter {
+    let addr: SocketAddr = bind_address
+        .parse()
+        .expect(&format!("can not parse listen address {}", bind_address));
 
-    encoded.next(); // skip leading empty value
-
-    let decoded = encoded
-        .map(|code| u8::from_str_radix(code, 16).unwrap())
-        .collect();
-
-    String::from_utf8(decoded).unwrap()
+    prometheus_exporter::start(addr).expect(&format!("can not start exporter on {}", bind_address))
 }
 
-async fn result_hash(response: reqwest::Response) -> DaikinResponse {
-    let body = response.text().await?;
+fn start_adaptors(configuration: &Configuration, client: &Client) -> Vec<DaikinAdaptor> {
+    let interval = configuration.interval();
+    let hosts = configuration.hosts();
 
-    let pairs = body.split(",");
+    hosts
+        .iter()
+        .map(|host| {
+            info!("Reading from Daikin adaptor {}", host);
 
-    let mut result = HashMap::new();
+            let daikin_adaptor = DaikinAdaptor::new(host.clone(), interval);
 
-    for pair in pairs {
-        let mut entry = pair.split("=");
+            let client = client.clone();
+            let adaptor = daikin_adaptor.clone();
 
-        let key = entry.next().unwrap().to_string();
-        let value = entry.next().unwrap().to_string();
+            tokio::spawn(async move {
+                adaptor.read_loop(client).await;
+            });
 
-        result.insert(key, value);
-    }
-
-    Ok(result)
-}
-
-async fn basic_info(client: &Client, addr: &str) -> DaikinResponse {
-    let url = format!("http://{}/common/basic_info", addr);
-
-    let response = client.get(&url).send().await?;
-
-    result_hash(response).await
-}
-
-async fn get_control_info(client: &Client, addr: &str) -> DaikinResponse {
-    let url = format!("http://{}/aircon/get_control_info", addr);
-
-    let response = client.get(&url).send().await?;
-
-    result_hash(response).await
+            daikin_adaptor
+        })
+        .collect()
 }
 
 #[tokio::main]
@@ -76,13 +63,11 @@ async fn main() {
     Builder::from_env(Env::default().default_filter_or("info")).init();
 
     let configuration = Configuration::load_from_next_arg();
+    let client = new_client(configuration.timeout());
 
-    let addr_raw = configuration.bind_address();
-    let addr: SocketAddr = addr_raw.parse().expect("can not parse listen addr");
+    let adaptors = start_adaptors(&configuration, &client);
 
-    let exporter = prometheus_exporter::start(addr).expect("can not start exporter");
-
-    let update_interval = configuration.interval();
+    let exporter = new_exporter(configuration.bind_address());
 
     let set_point_degrees = register_gauge_vec!(
         "daikin_set_point_degrees",
@@ -91,39 +76,21 @@ async fn main() {
     )
     .unwrap();
 
-    let client = new_client(configuration.timeout());
-
     loop {
-        let _guard = exporter.wait_duration(update_interval);
+        let _guard = exporter.wait_request();
+        debug!("Updating metrics");
 
-        debug!("Updating basic info");
+        for adaptor in &adaptors {
+            let info = adaptor.info.lock().await;
 
-        let basic_info = match basic_info(&client, "10.101.28.64").await {
-            Ok(i) => i,
-            Err(e) => {
-                debug!("error {:?}", e);
-                continue;
-            }
-        };
+            let device_name = info.get("device_name").unwrap();
+            let set_point: f64 = info.get("set_point").unwrap().parse().unwrap();
 
-        let device_name = decode(basic_info.get("name").unwrap());
+            set_point_degrees
+                .with_label_values(&[&device_name])
+                .set(set_point);
 
-        debug!("Updating control info");
-
-        let control_info = match get_control_info(&client, "10.101.28.64").await {
-            Ok(i) => i,
-            Err(e) => {
-                debug!("error {:?}", e);
-                continue;
-            }
-        };
-
-        let set_point: f64 = control_info.get("stemp").unwrap().parse().unwrap();
-
-        debug!("New set point: {}", set_point);
-
-        set_point_degrees
-            .with_label_values(&[&device_name])
-            .set(set_point);
+            debug!("Updated metrics for {} ({})", device_name, adaptor.host);
+        }
     }
 }

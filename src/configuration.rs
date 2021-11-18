@@ -48,4 +48,8 @@ impl Configuration {
 
         std::time::Duration::from_millis(timeout)
     }
+
+    pub fn hosts(&self) -> Vec<String> {
+        self.hosts.clone()
+    }
 }
