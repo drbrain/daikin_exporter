@@ -39,7 +39,7 @@ impl DaikinAdaptor {
     }
 
     async fn read_device(&self, client: &Client) {
-        let basic_info = match basic_info(&client, &self.host).await {
+        let basic_info = match get_info(&client, &self.host, "common/basic_info").await {
             Ok(i) => i,
             Err(e) => {
                 debug!("error {:?}", e);
@@ -50,7 +50,7 @@ impl DaikinAdaptor {
         let device_name = decode(basic_info.get("name").unwrap());
         let power_on = basic_info.get("pow").unwrap().to_string();
 
-        let control_info = match control_info(&client, &self.host).await {
+        let control_info = match get_info(&client, &self.host, "aircon/get_control_info").await {
             Ok(i) => i,
             Err(e) => {
                 debug!("error {:?}", e);
@@ -71,7 +71,7 @@ impl DaikinAdaptor {
 
         let fan_dir = control_info.get("f_dir").unwrap().to_string();
 
-        let sensor_info = match sensor_info(&client, &self.host).await {
+        let sensor_info = match get_info(&client, &self.host, "aircon/get_sensor_info").await {
             Ok(i) => i,
             Err(e) => {
                 debug!("error {:?}", e);
@@ -82,7 +82,7 @@ impl DaikinAdaptor {
         let unit_temp = sensor_info.get("htemp").unwrap().to_string();
         let outdoor_temp = sensor_info.get("otemp").unwrap().to_string();
 
-        let week_power = match week_power(&client, &self.host).await {
+        let week_power = match get_info(&client, &self.host, "aircon/get_week_power").await {
             Ok(i) => i,
             Err(e) => {
                 debug!("error {:?}", e);
@@ -141,40 +141,10 @@ async fn result_hash(response: reqwest::Response) -> DaikinResponse {
     Ok(result)
 }
 
-async fn basic_info(client: &Client, host: &str) -> DaikinResponse {
-    debug!("Updating basic info for {}", host);
+async fn get_info(client: &Client, host: &str, path: &str) -> DaikinResponse {
+    let url = format!("http://{}/{}", host, path);
 
-    let url = format!("http://{}/common/basic_info", host);
-
-    let response = client.get(&url).send().await?;
-
-    result_hash(response).await
-}
-
-async fn control_info(client: &Client, host: &str) -> DaikinResponse {
-    debug!("Updating control info for {}", host);
-
-    let url = format!("http://{}/aircon/get_control_info", host);
-
-    let response = client.get(&url).send().await?;
-
-    result_hash(response).await
-}
-
-async fn sensor_info(client: &Client, host: &str) -> DaikinResponse {
-    debug!("Updating sensor info for {}", host);
-
-    let url = format!("http://{}/aircon/get_sensor_info", host);
-
-    let response = client.get(&url).send().await?;
-
-    result_hash(response).await
-}
-
-async fn week_power(client: &Client, host: &str) -> DaikinResponse {
-    debug!("Updating sensor info for {}", host);
-
-    let url = format!("http://{}/aircon/get_week_power", host);
+    debug!("Fetching {}", url);
 
     let response = client.get(&url).send().await?;
 
