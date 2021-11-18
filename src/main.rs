@@ -21,11 +21,14 @@ use std::time::Duration;
 macro_rules! set_metric {
     ($info: expr, $device_name:expr, $metric_name:expr) => {
         if let Some(value) = $info.get(stringify!($metric_name)) {
-            let metric_value: f64 = value.parse().unwrap();
-
-            $metric_name
-                .with_label_values(&[&$device_name])
-                .set(metric_value);
+            match value.parse() {
+                Ok(metric_value) => {
+                    $metric_name
+                        .with_label_values(&[&$device_name])
+                        .set(metric_value);
+                }
+                Err(_) => (),
+            }
         }
     };
 }
@@ -119,6 +122,20 @@ async fn main() {
     )
     .unwrap();
 
+    let unit_temp = register_gauge_vec!(
+        "daikin_unit_temperature_degrees",
+        "Unit temperature",
+        &["device"]
+    )
+    .unwrap();
+
+    let outdoor_temp = register_gauge_vec!(
+        "daikin_outdoor_temperature_degrees",
+        "Outdoor temperature",
+        &["device"]
+    )
+    .unwrap();
+
     loop {
         let _guard = exporter.wait_request();
         debug!("Updating metrics");
@@ -139,6 +156,8 @@ async fn main() {
             set_metric!(info, device_name, set_temp);
             set_metric!(info, device_name, fan_rate);
             set_metric!(info, device_name, fan_dir);
+            set_metric!(info, device_name, unit_temp);
+            set_metric!(info, device_name, outdoor_temp);
 
             debug!("Updated metrics for {} ({})", device_name, adaptor.host);
         }

@@ -50,7 +50,7 @@ impl DaikinAdaptor {
         let device_name = decode(basic_info.get("name").unwrap());
         let power_on = basic_info.get("pow").unwrap().to_string();
 
-        let control_info = match get_control_info(&client, &self.host).await {
+        let control_info = match control_info(&client, &self.host).await {
             Ok(i) => i,
             Err(e) => {
                 debug!("error {:?}", e);
@@ -71,6 +71,17 @@ impl DaikinAdaptor {
 
         let fan_dir = control_info.get("f_dir").unwrap().to_string();
 
+        let sensor_info = match sensor_info(&client, &self.host).await {
+            Ok(i) => i,
+            Err(e) => {
+                debug!("error {:?}", e);
+                return;
+            }
+        };
+
+        let unit_temp = sensor_info.get("htemp").unwrap().to_string();
+        let outdoor_temp = sensor_info.get("otemp").unwrap().to_string();
+
         let mut info = self.info.lock().await;
 
         info.insert("device_name".to_string(), device_name);
@@ -81,6 +92,9 @@ impl DaikinAdaptor {
         info.insert("set_humid".to_string(), set_humid);
         info.insert("fan_rate".to_string(), fan_rate);
         info.insert("fan_dir".to_string(), fan_dir);
+
+        info.insert("unit_temp".to_string(), unit_temp);
+        info.insert("outdoor_temp".to_string(), outdoor_temp);
     }
 }
 
@@ -125,10 +139,20 @@ async fn basic_info(client: &Client, host: &str) -> DaikinResponse {
     result_hash(response).await
 }
 
-async fn get_control_info(client: &Client, host: &str) -> DaikinResponse {
+async fn control_info(client: &Client, host: &str) -> DaikinResponse {
     debug!("Updating control info for {}", host);
 
     let url = format!("http://{}/aircon/get_control_info", host);
+
+    let response = client.get(&url).send().await?;
+
+    result_hash(response).await
+}
+
+async fn sensor_info(client: &Client, host: &str) -> DaikinResponse {
+    debug!("Updating sensor info for {}", host);
+
+    let url = format!("http://{}/aircon/get_sensor_info", host);
 
     let response = client.get(&url).send().await?;
 
