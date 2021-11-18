@@ -136,6 +136,9 @@ async fn main() {
     )
     .unwrap();
 
+    let daily_runtime =
+        register_gauge_vec!("daikin_daily_runtime_minutes", "Daily runtime", &["device"]).unwrap();
+
     loop {
         let _guard = exporter.wait_request();
         debug!("Updating metrics");
@@ -158,6 +161,7 @@ async fn main() {
             set_metric!(info, device_name, fan_dir);
             set_metric!(info, device_name, unit_temp);
             set_metric!(info, device_name, outdoor_temp);
+            set_metric!(info, device_name, daily_runtime);
 
             debug!("Updated metrics for {} ({})", device_name, adaptor.host);
         }

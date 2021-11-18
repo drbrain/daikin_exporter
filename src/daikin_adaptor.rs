@@ -82,6 +82,16 @@ impl DaikinAdaptor {
         let unit_temp = sensor_info.get("htemp").unwrap().to_string();
         let outdoor_temp = sensor_info.get("otemp").unwrap().to_string();
 
+        let week_power = match week_power(&client, &self.host).await {
+            Ok(i) => i,
+            Err(e) => {
+                debug!("error {:?}", e);
+                return;
+            }
+        };
+
+        let daily_runtime = week_power.get("today_runtime").unwrap().to_string();
+
         let mut info = self.info.lock().await;
 
         info.insert("device_name".to_string(), device_name);
@@ -95,6 +105,8 @@ impl DaikinAdaptor {
 
         info.insert("unit_temp".to_string(), unit_temp);
         info.insert("outdoor_temp".to_string(), outdoor_temp);
+
+        info.insert("daily_runtime".to_string(), daily_runtime);
     }
 }
 
@@ -153,6 +165,16 @@ async fn sensor_info(client: &Client, host: &str) -> DaikinResponse {
     debug!("Updating sensor info for {}", host);
 
     let url = format!("http://{}/aircon/get_sensor_info", host);
+
+    let response = client.get(&url).send().await?;
+
+    result_hash(response).await
+}
+
+async fn week_power(client: &Client, host: &str) -> DaikinResponse {
+    debug!("Updating sensor info for {}", host);
+
+    let url = format!("http://{}/aircon/get_week_power", host);
 
     let response = client.get(&url).send().await?;
 
