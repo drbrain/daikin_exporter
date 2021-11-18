@@ -81,6 +81,7 @@ impl DaikinAdaptor {
 
         let unit_temp = sensor_info.get("htemp").unwrap().to_string();
         let outdoor_temp = sensor_info.get("otemp").unwrap().to_string();
+        let compressor_demand = sensor_info.get("cmpfreq").unwrap().to_string();
 
         let week_power = match get_info(&client, &self.host, "aircon/get_week_power").await {
             Ok(i) => i,
@@ -105,6 +106,7 @@ impl DaikinAdaptor {
 
         info.insert("unit_temp".to_string(), unit_temp);
         info.insert("outdoor_temp".to_string(), outdoor_temp);
+        info.insert("compressor_demand".to_string(), compressor_demand);
 
         info.insert("daily_runtime".to_string(), daily_runtime);
     }

@@ -136,6 +136,13 @@ async fn main() {
     )
     .unwrap();
 
+    let compressor_demand = register_gauge_vec!(
+        "daikin_compressor_demand_percent",
+        "Compressor demand (0–100)",
+        &["device"]
+    )
+    .unwrap();
+
     let daily_runtime =
         register_gauge_vec!("daikin_daily_runtime_minutes", "Daily runtime", &["device"]).unwrap();
 
@@ -162,6 +169,7 @@ async fn main() {
             set_metric!(info, device_name, unit_temp);
             set_metric!(info, device_name, outdoor_temp);
             set_metric!(info, device_name, daily_runtime);
+            set_metric!(info, device_name, compressor_demand);
 
             debug!("Updated metrics for {} ({})", device_name, adaptor.host);
         }
