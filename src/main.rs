@@ -83,12 +83,20 @@ async fn main() {
         for adaptor in &adaptors {
             let info = adaptor.info.lock().await;
 
-            let device_name = info.get("device_name").unwrap();
-            let set_point: f64 = info.get("set_point").unwrap().parse().unwrap();
+            let device_name = match info.get("device_name") {
+                Some(name) => name,
+                None => {
+                    continue;
+                }
+            };
 
-            set_point_degrees
-                .with_label_values(&[&device_name])
-                .set(set_point);
+            if let Some(set_point) = info.get("set_point") {
+                let set_point: f64 = set_point.parse().unwrap();
+
+                set_point_degrees
+                    .with_label_values(&[&device_name])
+                    .set(set_point);
+            }
 
             debug!("Updated metrics for {} ({})", device_name, adaptor.host);
         }
