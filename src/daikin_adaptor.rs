@@ -9,8 +9,8 @@ use reqwest::Client;
 use tokio::sync::Mutex;
 use tokio::time::sleep;
 
-type DaikinResponse = Result<HashMap<String, String>, reqwest::Error>;
 type Info = HashMap<String, String>;
+type DaikinResponse = Result<Info, reqwest::Error>;
 
 #[derive(Clone)]
 pub struct DaikinAdaptor {
@@ -39,123 +39,124 @@ impl DaikinAdaptor {
     }
 
     async fn read_device(&self, client: &Client) {
-        let basic_info = match self.get_info(client, "common/basic_info").await {
-            Ok(i) => i,
-            Err(e) => {
-                debug!("error {:?}", e);
-                return;
-            }
-        };
+        if let Some(basic_info) = self.get_info(client, "common/basic_info").await {
+            let device_name = percent_decode(basic_info.get("name").unwrap());
+            let power_on = basic_info.get("pow").unwrap().to_string();
 
-        let device_name = percent_decode(basic_info.get("name").unwrap());
-        let power_on = basic_info.get("pow").unwrap().to_string();
+            let mut info = self.info.lock().await;
 
-        let control_info = match self.get_info(client, "aircon/get_control_info").await {
-            Ok(i) => i,
-            Err(e) => {
-                debug!("error {:?}", e);
-                return;
-            }
-        };
-
-        let set_temp = control_info.get("stemp").unwrap().to_string();
-        let set_humid = control_info.get("shum").unwrap().to_string();
-        let mode = control_info.get("mode").unwrap().to_string();
-        let mut fan_rate = control_info.get("f_rate").unwrap().to_string();
-
-        if fan_rate == "A" {
-            fan_rate = "1".to_string();
-        } else if fan_rate == "B" {
-            fan_rate = "2".to_string();
+            info.insert("device_name".to_string(), device_name);
+            info.insert("power_on".to_string(), power_on);
         }
 
-        let fan_dir = control_info.get("f_dir").unwrap().to_string();
+        {
+            let info = self.info.lock().await;
 
-        let sensor_info = match self.get_info(client, "aircon/get_sensor_info").await {
-            Ok(i) => i,
-            Err(e) => {
-                debug!("error {:?}", e);
+            if !info.contains_key("device_name") {
+                // We haven't retrieved the device name yet so we won't be able to assign the device
+                // label to any of the metrics we will collect below.
                 return;
             }
-        };
+        }
 
-        let unit_temp = sensor_info.get("htemp").unwrap().to_string();
-        let outdoor_temp = sensor_info.get("otemp").unwrap().to_string();
-        let compressor_demand = sensor_info.get("cmpfreq").unwrap().to_string();
+        if let Some(control_info) = self.get_info(client, "aircon/get_control_info").await {
+            let set_temp = control_info.get("stemp").unwrap().to_string();
+            let set_humid = control_info.get("shum").unwrap().to_string();
+            let mode = control_info.get("mode").unwrap().to_string();
+            let mut fan_rate = control_info.get("f_rate").unwrap().to_string();
 
-        let week_power = match self.get_info(client, "aircon/get_week_power").await {
-            Ok(i) => i,
-            Err(e) => {
-                debug!("error {:?}", e);
-                return;
+            if fan_rate == "A" {
+                fan_rate = "1".to_string();
+            } else if fan_rate == "B" {
+                fan_rate = "2".to_string();
             }
-        };
 
-        let daily_runtime = week_power.get("today_runtime").unwrap().to_string();
+            let fan_dir = control_info.get("f_dir").unwrap().to_string();
 
-        let monitor_data = match self.get_info(client, "aircon/get_monitordata").await {
-            Ok(i) => i,
-            Err(e) => {
-                debug!("error {:?}", e);
-                return;
-            }
-        };
+            let mut info = self.info.lock().await;
 
-        //let monitor_tap = decode(monitor_data.get("tap").unwrap());
+            info.insert("mode".to_string(), mode);
+            info.insert("set_temp".to_string(), set_temp);
+            info.insert("set_humid".to_string(), set_humid);
+            info.insert("fan_rate".to_string(), fan_rate);
+            info.insert("fan_dir".to_string(), fan_dir);
+        }
 
-        // Probably duplicate from control info
-        //let monitor_mode = decode(monitor_data.get("mode").unwrap());
+        if let Some(sensor_info) = self.get_info(client, "aircon/get_sensor_info").await {
+            let unit_temp = sensor_info.get("htemp").unwrap().to_string();
+            let outdoor_temp = sensor_info.get("otemp").unwrap().to_string();
+            let compressor_demand = sensor_info.get("cmpfreq").unwrap().to_string();
 
-        // Probably duplicate from control info
-        //let monitor_pow = decode(monitor_data.get("pow").unwrap());
+            let mut info = self.info.lock().await;
 
-        let monitor_fan_speed = decode(monitor_data.get("fan").unwrap());
-        let monitor_rawrtmp = decode(monitor_data.get("rawrtmp").unwrap());
-        let monitor_trtmp = decode(monitor_data.get("trtmp").unwrap());
-        let monitor_fangl = decode(monitor_data.get("fangl").unwrap());
-        let monitor_hetmp = decode(monitor_data.get("hetmp").unwrap());
-        let monitor_resets = monitor_data.get("ResetCount").unwrap().to_string();
-        let monitor_router_disconnects = monitor_data.get("RouterDisconCnt").unwrap().to_string();
-        let monitor_polling_errors = monitor_data.get("PollingErrCnt").unwrap().to_string();
+            info.insert("unit_temp".to_string(), unit_temp);
+            info.insert("outdoor_temp".to_string(), outdoor_temp);
+            info.insert("compressor_demand".to_string(), compressor_demand);
+        }
 
-        let mut info = self.info.lock().await;
+        if let Some(week_power) = self.get_info(client, "aircon/get_week_power").await {
+            let daily_runtime = week_power.get("today_runtime").unwrap().to_string();
 
-        info.insert("device_name".to_string(), device_name);
-        info.insert("power_on".to_string(), power_on);
+            let mut info = self.info.lock().await;
 
-        info.insert("mode".to_string(), mode);
-        info.insert("set_temp".to_string(), set_temp);
-        info.insert("set_humid".to_string(), set_humid);
-        info.insert("fan_rate".to_string(), fan_rate);
-        info.insert("fan_dir".to_string(), fan_dir);
+            info.insert("daily_runtime".to_string(), daily_runtime);
+        }
 
-        info.insert("unit_temp".to_string(), unit_temp);
-        info.insert("outdoor_temp".to_string(), outdoor_temp);
-        info.insert("compressor_demand".to_string(), compressor_demand);
+        if let Some(monitor_data) = self.get_info(client, "aircon/get_monitordata").await {
+            //let monitor_tap = decode(monitor_data.get("tap").unwrap());
 
-        info.insert("daily_runtime".to_string(), daily_runtime);
+            // Probably duplicate from control info
+            //let monitor_mode = decode(monitor_data.get("mode").unwrap());
 
-        info.insert("monitor_fan_speed".to_string(), monitor_fan_speed);
-        info.insert("monitor_rawrtmp".to_string(), monitor_rawrtmp);
-        info.insert("monitor_trtmp".to_string(), monitor_trtmp);
-        info.insert("monitor_fangl".to_string(), monitor_fangl);
-        info.insert("monitor_hetmp".to_string(), monitor_hetmp);
-        info.insert("monitor_resets".to_string(), monitor_resets);
-        info.insert(
-            "monitor_router_disconnects".to_string(),
-            monitor_router_disconnects,
-        );
-        info.insert("monitor_polling_errors".to_string(), monitor_polling_errors);
+            // Probably duplicate from control info
+            //let monitor_pow = decode(monitor_data.get("pow").unwrap());
+
+            let monitor_fan_speed = decode(monitor_data.get("fan").unwrap());
+            let monitor_rawrtmp = decode(monitor_data.get("rawrtmp").unwrap());
+            let monitor_trtmp = decode(monitor_data.get("trtmp").unwrap());
+            let monitor_fangl = decode(monitor_data.get("fangl").unwrap());
+            let monitor_hetmp = decode(monitor_data.get("hetmp").unwrap());
+            let monitor_resets = monitor_data.get("ResetCount").unwrap().to_string();
+            let monitor_router_disconnects =
+                monitor_data.get("RouterDisconCnt").unwrap().to_string();
+            let monitor_polling_errors = monitor_data.get("PollingErrCnt").unwrap().to_string();
+
+            let mut info = self.info.lock().await;
+
+            info.insert("monitor_fan_speed".to_string(), monitor_fan_speed);
+            info.insert("monitor_rawrtmp".to_string(), monitor_rawrtmp);
+            info.insert("monitor_trtmp".to_string(), monitor_trtmp);
+            info.insert("monitor_fangl".to_string(), monitor_fangl);
+            info.insert("monitor_hetmp".to_string(), monitor_hetmp);
+            info.insert("monitor_resets".to_string(), monitor_resets);
+            info.insert(
+                "monitor_router_disconnects".to_string(),
+                monitor_router_disconnects,
+            );
+            info.insert("monitor_polling_errors".to_string(), monitor_polling_errors);
+        }
     }
 
-    async fn get_info(&self, client: &Client, path: &str) -> DaikinResponse {
+    async fn get_info(&self, client: &Client, path: &str) -> Option<Info> {
         let url = format!("http://{}/{}", self.host, path);
 
         debug!("Fetching {}", url);
 
-        let response = client.get(&url).send().await?;
+        let response = match client.get(&url).send().await {
+            Ok(r) => r,
+            Err(e) => {
+                debug!("error {:?}", e);
+                return None;
+            }
+        };
 
-        result_hash(response).await
+        match result_hash(response).await {
+            Ok(r) => Some(r),
+            Err(e) => {
+                debug!("error {:?}", e);
+                None
+            }
+        }
     }
 }
 
