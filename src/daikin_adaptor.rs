@@ -39,7 +39,7 @@ impl DaikinAdaptor {
     }
 
     async fn read_device(&self, client: &Client) {
-        let basic_info = match get_info(&client, &self.host, "common/basic_info").await {
+        let basic_info = match self.get_info(client, "common/basic_info").await {
             Ok(i) => i,
             Err(e) => {
                 debug!("error {:?}", e);
@@ -50,7 +50,7 @@ impl DaikinAdaptor {
         let device_name = percent_decode(basic_info.get("name").unwrap());
         let power_on = basic_info.get("pow").unwrap().to_string();
 
-        let control_info = match get_info(&client, &self.host, "aircon/get_control_info").await {
+        let control_info = match self.get_info(client, "aircon/get_control_info").await {
             Ok(i) => i,
             Err(e) => {
                 debug!("error {:?}", e);
@@ -71,7 +71,7 @@ impl DaikinAdaptor {
 
         let fan_dir = control_info.get("f_dir").unwrap().to_string();
 
-        let sensor_info = match get_info(&client, &self.host, "aircon/get_sensor_info").await {
+        let sensor_info = match self.get_info(client, "aircon/get_sensor_info").await {
             Ok(i) => i,
             Err(e) => {
                 debug!("error {:?}", e);
@@ -83,7 +83,7 @@ impl DaikinAdaptor {
         let outdoor_temp = sensor_info.get("otemp").unwrap().to_string();
         let compressor_demand = sensor_info.get("cmpfreq").unwrap().to_string();
 
-        let week_power = match get_info(&client, &self.host, "aircon/get_week_power").await {
+        let week_power = match self.get_info(client, "aircon/get_week_power").await {
             Ok(i) => i,
             Err(e) => {
                 debug!("error {:?}", e);
@@ -93,7 +93,7 @@ impl DaikinAdaptor {
 
         let daily_runtime = week_power.get("today_runtime").unwrap().to_string();
 
-        let monitor_data = match get_info(&client, &self.host, "aircon/get_monitordata").await {
+        let monitor_data = match self.get_info(client, "aircon/get_monitordata").await {
             Ok(i) => i,
             Err(e) => {
                 debug!("error {:?}", e);
@@ -147,6 +147,16 @@ impl DaikinAdaptor {
         );
         info.insert("monitor_polling_errors".to_string(), monitor_polling_errors);
     }
+
+    async fn get_info(&self, client: &Client, path: &str) -> DaikinResponse {
+        let url = format!("http://{}/{}", self.host, path);
+
+        debug!("Fetching {}", url);
+
+        let response = client.get(&url).send().await?;
+
+        result_hash(response).await
+    }
 }
 
 // Decodes "%41%42" to "AB"
@@ -194,14 +204,4 @@ async fn result_hash(response: reqwest::Response) -> DaikinResponse {
     }
 
     Ok(result)
-}
-
-async fn get_info(client: &Client, host: &str, path: &str) -> DaikinResponse {
-    let url = format!("http://{}/{}", host, path);
-
-    debug!("Fetching {}", url);
-
-    let response = client.get(&url).send().await?;
-
-    result_hash(response).await
 }
