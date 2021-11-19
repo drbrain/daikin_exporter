@@ -1,16 +1,44 @@
-use std::collections::HashMap;
-use std::sync::Arc;
-use std::time::Duration;
+use lazy_static::lazy_static;
 
 use log::debug;
 
+use prometheus_exporter::prometheus::register_counter_vec;
+use prometheus_exporter::prometheus::register_histogram_vec;
+use prometheus_exporter::prometheus::CounterVec;
+use prometheus_exporter::prometheus::HistogramVec;
+
 use reqwest::Client;
+
+use std::collections::HashMap;
+use std::sync::Arc;
+use std::time::Duration;
 
 use tokio::sync::Mutex;
 use tokio::time::sleep;
 
 type Info = HashMap<String, String>;
 type DaikinResponse = Result<Info, reqwest::Error>;
+
+lazy_static! {
+    static ref REQUESTS: CounterVec = register_counter_vec!(
+        "daikin_http_requests_total",
+        "Number of HTTP requests made to Daikin adaptors",
+        &["host", "path"],
+    )
+    .unwrap();
+    static ref ERRORS: CounterVec = register_counter_vec!(
+        "daikin_http_request_errors_total",
+        "Number of HTTP request errors made to Daikin adaptors",
+        &["host", "path", "error_type"],
+    )
+    .unwrap();
+    static ref DURATIONS: HistogramVec = register_histogram_vec!(
+        "daikin_http_request_duration_seconds",
+        "HTTP request durations",
+        &["host", "path"],
+    )
+    .unwrap();
+}
 
 #[derive(Clone)]
 pub struct DaikinAdaptor {
@@ -138,14 +166,26 @@ impl DaikinAdaptor {
     }
 
     async fn get_info(&self, client: &Client, path: &str) -> Option<Info> {
+        let path = path.to_string();
         let url = format!("http://{}/{}", self.host, path);
 
         debug!("Fetching {}", url);
+        REQUESTS.with_label_values(&[&self.host, &path]).inc();
+        let timer = DURATIONS
+            .with_label_values(&[&self.host, &path])
+            .start_timer();
 
-        let response = match client.get(&url).send().await {
+        let response = client.get(&url).send().await;
+
+        timer.observe_duration();
+
+        let response = match response {
             Ok(r) => r,
             Err(e) => {
-                debug!("error {:?}", e);
+                debug!("request error: {:?}", e);
+                ERRORS
+                    .with_label_values(&[&self.host, &path, "request"])
+                    .inc();
                 return None;
             }
         };
@@ -153,7 +193,8 @@ impl DaikinAdaptor {
         match result_hash(response).await {
             Ok(r) => Some(r),
             Err(e) => {
-                debug!("error {:?}", e);
+                debug!("request body error: {:?}", e);
+                ERRORS.with_label_values(&[&self.host, &path, "body"]).inc();
                 None
             }
         }
