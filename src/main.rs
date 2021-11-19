@@ -33,6 +33,21 @@ macro_rules! set_metric {
     };
 }
 
+macro_rules! set_metric_divide {
+    ($info: expr, $device_name:expr, $metric_name:expr, $divisor:expr) => {
+        if let Some(value) = $info.get(stringify!($metric_name)) {
+            match value.parse::<f64>() {
+                Ok(metric_value) => {
+                    $metric_name
+                        .with_label_values(&[&$device_name])
+                        .set(metric_value / $divisor);
+                }
+                Err(_) => (),
+            }
+        }
+    };
+}
+
 fn new_client(timeout: Duration) -> Client {
     Client::builder()
         .connect_timeout(timeout)
@@ -146,6 +161,46 @@ async fn main() {
     let daily_runtime =
         register_gauge_vec!("daikin_daily_runtime_minutes", "Daily runtime", &["device"]).unwrap();
 
+    let monitor_fan_speed =
+        register_gauge_vec!("daikin_monitor_fan_speed", "Unit fan speed", &["device"]).unwrap();
+    let monitor_rawrtmp = register_gauge_vec!(
+        "daikin_monitor_rawr_temperature_degrees",
+        "Room air temperature",
+        &["device"]
+    )
+    .unwrap();
+    let monitor_trtmp = register_gauge_vec!(
+        "daikin_monitor_tr_temperature_degrees",
+        "tr tempurature",
+        &["device"]
+    )
+    .unwrap();
+    let monitor_fangl = register_gauge_vec!("daikin_monitor_fangl", "fangl", &["device"]).unwrap();
+    let monitor_hetmp = register_gauge_vec!(
+        "daikin_monitor_heat_exchanger_temperature_degrees",
+        "Heat exchanger",
+        &["device"]
+    )
+    .unwrap();
+    let monitor_resets = register_gauge_vec!(
+        "daikin_monitor_reset_count",
+        "Wifi adatptor resets",
+        &["device"]
+    )
+    .unwrap();
+    let monitor_router_disconnects = register_gauge_vec!(
+        "daikin_monitor_router_disconnect_count",
+        "Router disconnections",
+        &["device"]
+    )
+    .unwrap();
+    let monitor_polling_errors = register_gauge_vec!(
+        "daikin_monitor_polling_error_count",
+        "Polling errors",
+        &["device"]
+    )
+    .unwrap();
+
     loop {
         let _guard = exporter.wait_request();
         debug!("Updating metrics");
@@ -170,6 +225,15 @@ async fn main() {
             set_metric!(info, device_name, outdoor_temp);
             set_metric!(info, device_name, daily_runtime);
             set_metric!(info, device_name, compressor_demand);
+
+            set_metric!(info, device_name, monitor_fan_speed);
+            set_metric!(info, device_name, monitor_fangl);
+            set_metric_divide!(info, device_name, monitor_hetmp, 10.0);
+            set_metric!(info, device_name, monitor_polling_errors);
+            set_metric_divide!(info, device_name, monitor_rawrtmp, 10.0);
+            set_metric!(info, device_name, monitor_resets);
+            set_metric!(info, device_name, monitor_router_disconnects);
+            set_metric_divide!(info, device_name, monitor_trtmp, 10.0);
 
             debug!("Updated metrics for {} ({})", device_name, adaptor.host);
         }

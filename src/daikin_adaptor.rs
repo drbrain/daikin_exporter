@@ -47,7 +47,7 @@ impl DaikinAdaptor {
             }
         };
 
-        let device_name = decode(basic_info.get("name").unwrap());
+        let device_name = percent_decode(basic_info.get("name").unwrap());
         let power_on = basic_info.get("pow").unwrap().to_string();
 
         let control_info = match get_info(&client, &self.host, "aircon/get_control_info").await {
@@ -93,6 +93,31 @@ impl DaikinAdaptor {
 
         let daily_runtime = week_power.get("today_runtime").unwrap().to_string();
 
+        let monitor_data = match get_info(&client, &self.host, "aircon/get_monitordata").await {
+            Ok(i) => i,
+            Err(e) => {
+                debug!("error {:?}", e);
+                return;
+            }
+        };
+
+        //let monitor_tap = decode(monitor_data.get("tap").unwrap());
+
+        // Probably duplicate from control info
+        //let monitor_mode = decode(monitor_data.get("mode").unwrap());
+
+        // Probably duplicate from control info
+        //let monitor_pow = decode(monitor_data.get("pow").unwrap());
+
+        let monitor_fan_speed = decode(monitor_data.get("fan").unwrap());
+        let monitor_rawrtmp = decode(monitor_data.get("rawrtmp").unwrap());
+        let monitor_trtmp = decode(monitor_data.get("trtmp").unwrap());
+        let monitor_fangl = decode(monitor_data.get("fangl").unwrap());
+        let monitor_hetmp = decode(monitor_data.get("hetmp").unwrap());
+        let monitor_resets = monitor_data.get("ResetCount").unwrap().to_string();
+        let monitor_router_disconnects = monitor_data.get("RouterDisconCnt").unwrap().to_string();
+        let monitor_polling_errors = monitor_data.get("PollingErrCnt").unwrap().to_string();
+
         let mut info = self.info.lock().await;
 
         info.insert("device_name".to_string(), device_name);
@@ -109,10 +134,24 @@ impl DaikinAdaptor {
         info.insert("compressor_demand".to_string(), compressor_demand);
 
         info.insert("daily_runtime".to_string(), daily_runtime);
+
+        info.insert("monitor_fan_speed".to_string(), monitor_fan_speed);
+        info.insert("monitor_rawrtmp".to_string(), monitor_rawrtmp);
+        info.insert("monitor_trtmp".to_string(), monitor_trtmp);
+        info.insert("monitor_fangl".to_string(), monitor_fangl);
+        info.insert("monitor_hetmp".to_string(), monitor_hetmp);
+        info.insert("monitor_resets".to_string(), monitor_resets);
+        info.insert(
+            "monitor_router_disconnects".to_string(),
+            monitor_router_disconnects,
+        );
+        info.insert("monitor_polling_errors".to_string(), monitor_polling_errors);
     }
 }
 
-fn decode(encoded: &String) -> String {
+// Decodes "%41%42" to "AB"
+
+fn percent_decode(encoded: &String) -> String {
     let mut encoded = encoded.split("%");
 
     encoded.next(); // skip leading empty value
@@ -120,6 +159,20 @@ fn decode(encoded: &String) -> String {
     let decoded = encoded
         .map(|code| u8::from_str_radix(code, 16).unwrap())
         .collect();
+
+    String::from_utf8(decoded).unwrap()
+}
+
+// Decodes "4142" to "AB"
+
+fn decode(encoded: &String) -> String {
+    let pairs = encoded.len() / 2;
+    let mut decoded = Vec::with_capacity(pairs);
+
+    for pair in 0..pairs {
+        let offset = pair * 2;
+        decoded.push(u8::from_str_radix(&encoded[offset..offset + 2], 16).unwrap());
+    }
 
     String::from_utf8(decoded).unwrap()
 }
