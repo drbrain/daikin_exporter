@@ -45,20 +45,22 @@ impl DaikinWatcher {
         self.adaptors = self
             .hosts
             .iter()
-            .map(|host| {
-                info!("Reading from Daikin adaptor {}", host);
-
-                let daikin_adaptor = DaikinAdaptor::new(host.clone(), self.interval);
-
-                let client = self.client.clone();
-                let adaptor = daikin_adaptor.clone();
-
-                tokio::spawn(async move {
-                    adaptor.read_loop(client).await;
-                });
-
-                daikin_adaptor
-            })
+            .map(|host| self.start_adaptor(host))
             .collect()
+    }
+
+    fn start_adaptor(&self, host: &String) -> DaikinAdaptor {
+        info!("Watching Daikin adaptor {}", host);
+
+        let daikin_adaptor = DaikinAdaptor::new(host.clone(), self.interval);
+
+        let client = self.client.clone();
+        let adaptor = daikin_adaptor.clone();
+
+        tokio::spawn(async move {
+            adaptor.read_loop(client).await;
+        });
+
+        daikin_adaptor
     }
 }
