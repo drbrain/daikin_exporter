@@ -5,10 +5,13 @@ use log::info;
 
 use reqwest::Client;
 
+use std::collections::HashMap;
 use std::time::Duration;
 
+type Adaptors = HashMap<String, DaikinAdaptor>;
+
 pub struct DaikinWatcher {
-    adaptors: Vec<DaikinAdaptor>,
+    adaptors: Adaptors,
     client: Client,
     hosts: Vec<String>,
     interval: Duration,
@@ -27,7 +30,7 @@ impl DaikinWatcher {
             .build()
             .expect("Could not build client");
 
-        let adaptors = Vec::new();
+        let adaptors = HashMap::new();
 
         DaikinWatcher {
             adaptors,
@@ -38,15 +41,15 @@ impl DaikinWatcher {
     }
 
     pub fn adaptors(&self) -> Vec<DaikinAdaptor> {
-        self.adaptors.clone()
+        self.adaptors.values().map(|a| a.clone()).collect()
     }
 
     pub fn start(&mut self) {
-        self.adaptors = self
-            .hosts
-            .iter()
-            .map(|host| self.start_adaptor(host))
-            .collect()
+        for host in self.hosts.clone() {
+            let adaptor = self.start_adaptor(&host);
+
+            self.adaptors.insert(host, adaptor);
+        }
     }
 
     fn start_adaptor(&self, host: &String) -> DaikinAdaptor {
