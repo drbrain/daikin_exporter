@@ -161,8 +161,12 @@ async fn main() {
     let daily_runtime =
         register_gauge_vec!("daikin_daily_runtime_minutes", "Daily runtime", &["device"]).unwrap();
 
-    let monitor_fan_speed =
-        register_gauge_vec!("daikin_monitor_fan_speed", "Unit fan speed", &["device"]).unwrap();
+    let monitor_fan_speed = register_gauge_vec!(
+        "daikin_monitor_fan_speed_percent",
+        "Unit fan speed (0–100)",
+        &["device"]
+    )
+    .unwrap();
     let monitor_rawrtmp = register_gauge_vec!(
         "daikin_monitor_rawr_temperature_degrees",
         "Room air temperature",
