@@ -8,6 +8,7 @@ use reqwest::Client;
 use std::time::Duration;
 
 pub struct DaikinWatcher {
+    adaptors: Vec<DaikinAdaptor>,
     client: Client,
     hosts: Vec<String>,
     interval: Duration,
@@ -26,15 +27,23 @@ impl DaikinWatcher {
             .build()
             .expect("Could not build client");
 
+        let adaptors = Vec::new();
+
         DaikinWatcher {
+            adaptors,
             client,
             hosts,
             interval,
         }
     }
 
-    pub fn start(&self) -> Vec<DaikinAdaptor> {
-        self.hosts
+    pub fn adaptors(&self) -> Vec<DaikinAdaptor> {
+        self.adaptors.clone()
+    }
+
+    pub fn start(&mut self) {
+        self.adaptors = self
+            .hosts
             .iter()
             .map(|host| {
                 info!("Reading from Daikin adaptor {}", host);

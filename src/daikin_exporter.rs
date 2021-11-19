@@ -1,4 +1,4 @@
-use crate::daikin_adaptor::DaikinAdaptor;
+use crate::daikin_watcher::DaikinWatcher;
 
 use log::debug;
 
@@ -53,7 +53,7 @@ impl DaikinExporter {
         DaikinExporter { exporter }
     }
 
-    pub async fn run(&self, adaptors: Vec<DaikinAdaptor>) {
+    pub async fn run(&self, watcher: DaikinWatcher) {
         let power_on =
             register_gauge_vec!("daikin_power_on", "Daikin unit is on", &["device"]).unwrap();
 
@@ -167,7 +167,7 @@ impl DaikinExporter {
 
             debug!("Updating metrics");
 
-            for adaptor in &adaptors {
+            for adaptor in &watcher.adaptors() {
                 let info = adaptor.info.lock().await;
 
                 let device_name = match info.get("device_name") {

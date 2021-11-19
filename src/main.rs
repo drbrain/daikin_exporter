@@ -16,9 +16,10 @@ async fn main() {
 
     let configuration = Configuration::load_from_next_arg();
 
-    let adaptors = DaikinWatcher::new(&configuration).start();
+    let mut watcher = DaikinWatcher::new(&configuration);
+    watcher.start();
 
     DaikinExporter::new(configuration.bind_address())
-        .run(adaptors)
+        .run(watcher)
         .await;
 }
