@@ -6,22 +6,29 @@ use log::info;
 use reqwest::Client;
 
 use std::collections::HashMap;
+use std::sync::Arc;
 use std::time::Duration;
 
-type Adaptors = HashMap<String, DaikinAdaptor>;
+use tokio::sync::broadcast;
+use tokio::sync::Mutex;
 
+type Adaptors = HashMap<String, DaikinAdaptor>;
+type AddressSender = broadcast::Sender<String>;
+
+#[derive(Clone)]
 pub struct DaikinWatcher {
-    adaptors: Adaptors,
+    adaptors: Arc<Mutex<Adaptors>>,
+    discover: AddressSender,
     client: Client,
-    hosts: Vec<String>,
+    hosts: Option<Vec<String>>,
     interval: Duration,
 }
 
 impl DaikinWatcher {
-    pub fn new(configuration: &Configuration) -> Self {
+    pub fn new(discover: AddressSender, configuration: &Configuration) -> Self {
         let hosts = configuration.hosts();
-        let interval = configuration.interval();
-        let timeout = configuration.timeout();
+        let interval = configuration.refresh_interval();
+        let timeout = configuration.refresh_timeout();
 
         let client = Client::builder()
             .connect_timeout(timeout)
@@ -30,29 +37,49 @@ impl DaikinWatcher {
             .build()
             .expect("Could not build client");
 
-        let adaptors = HashMap::new();
+        let adaptors = Arc::new(Mutex::new(HashMap::new()));
 
         DaikinWatcher {
             adaptors,
+            discover,
             client,
             hosts,
             interval,
         }
     }
 
-    pub fn adaptors(&self) -> Vec<DaikinAdaptor> {
-        self.adaptors.values().map(|a| a.clone()).collect()
+    pub async fn adaptors(&self) -> Vec<DaikinAdaptor> {
+        let adaptors = self.adaptors.lock().await;
+
+        adaptors.values().map(|a| a.clone()).collect()
     }
 
-    pub fn start(&mut self) {
-        for host in self.hosts.clone() {
-            let adaptor = self.start_adaptor(&host);
-
-            self.adaptors.insert(host, adaptor);
+    pub async fn start(&mut self) {
+        if let Some(hosts) = self.hosts.clone() {
+            for host in hosts {
+                self.start_adaptor(&host).await;
+            }
         }
+
+        let mut discovered = self.discover.subscribe();
+        let this = self.clone();
+
+        tokio::spawn(async move {
+            loop {
+                let address = discovered.recv().await.unwrap();
+
+                this.start_adaptor(&address).await;
+            }
+        });
     }
 
-    fn start_adaptor(&self, host: &String) -> DaikinAdaptor {
+    async fn start_adaptor(&self, host: &String) {
+        let mut adaptors = self.adaptors.lock().await;
+
+        if adaptors.contains_key(host) {
+            return;
+        }
+
         info!("Watching Daikin adaptor {}", host);
 
         let daikin_adaptor = DaikinAdaptor::new(host.clone(), self.interval);
@@ -64,6 +91,6 @@ impl DaikinWatcher {
             adaptor.read_loop(client).await;
         });
 
-        daikin_adaptor
+        adaptors.insert(host.to_string(), daikin_adaptor);
     }
 }

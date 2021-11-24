@@ -155,6 +155,7 @@ impl DaikinExporter {
             &["device"]
         )
         .unwrap();
+
         let monitor_polling_errors = register_gauge_vec!(
             "daikin_monitor_polling_error_count",
             "Polling errors",
@@ -167,7 +168,7 @@ impl DaikinExporter {
 
             debug!("Updating metrics");
 
-            for adaptor in &watcher.adaptors() {
+            for adaptor in &watcher.adaptors().await {
                 let info = adaptor.info.lock().await;
 
                 let device_name = match info.get("device_name") {
