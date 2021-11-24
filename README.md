@@ -10,14 +10,22 @@ The below values are defaults (except `hosts`, it's commented out and provided
 as an example).  All interval values are in milliseconds.
 
 ```toml
-discover_interval = 300000
+discover_major_interval = 300000
+discover_minor_interval = 200
 refresh_interval = 2000
 refresh_timeout = 250
 # hosts = ["192.0.2.10", "192.0.2.11"]
 ```
 
-The `discover_interval` is the interval between discover broadcast requests.
-The default is 5 minutes.
+The `discover_major_interval` is the long interval between discover broadcast
+requests.  The default is 5 minutes.
+
+The `discover_minor_interval` is the short interval between discover broadcast
+requests.  The default is 200 milliseconds.
+
+The ComfortControl iOS app sends two requests about 200 milliseconds apart,
+then repeats the broadcast about 3 seconds later.  To avoid excessive UDP
+traffic the exporter is much more conservative for the major interval.
 
 The `refresh_interval` is the interval in ms between unit refreshes.  The
 default is 2 seconds.

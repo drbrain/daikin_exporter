@@ -7,8 +7,8 @@ use std::path::Path;
 pub struct Configuration {
     bind_address: Option<String>,
     hosts: Option<Vec<String>>,
-    discover_interval: Option<u64>,
-    discover_timeout: Option<u64>,
+    discover_major_interval: Option<u64>,
+    discover_minor_interval: Option<u64>,
     refresh_interval: Option<u64>,
     refresh_timeout: Option<u64>,
 }
@@ -43,19 +43,18 @@ impl Configuration {
             .to_string()
     }
 
-    // Interval between discover requests.  Defaults to 5 minutes
-    pub fn discover_interval(&self) -> std::time::Duration {
-        let interval = self.discover_interval.unwrap_or(300_000);
+    // Long interval between discover requests.  Defaults to 5 minutes
+    pub fn discover_major_interval(&self) -> std::time::Duration {
+        let interval = self.discover_major_interval.unwrap_or(300_000);
 
         std::time::Duration::from_millis(interval)
     }
 
-    /// TODO decouple discover broadcast and receive so we can listen forever and broadcast
-    /// occasionally.  Then I can remove this timeout.
-    pub fn discover_timeout(&self) -> std::time::Duration {
-        let timeout = self.discover_timeout.unwrap_or(50);
+    // Short interval between discover requests.  Defaults to 200 milliseconds
+    pub fn discover_minor_interval(&self) -> std::time::Duration {
+        let interval = self.discover_minor_interval.unwrap_or(200);
 
-        std::time::Duration::from_millis(timeout)
+        std::time::Duration::from_millis(interval)
     }
 
     // Interval between HVAC unit data refreshes.  Defaults to 2 seconds.

@@ -19,13 +19,12 @@ use log::trace;
 
 use tokio::net::UdpSocket;
 use tokio::sync::broadcast;
-use tokio::sync::oneshot;
+use tokio::sync::mpsc;
 use tokio::time::sleep;
-use tokio::time::timeout;
 
 type AddressSender = broadcast::Sender<String>;
-type ErrorSender = oneshot::Sender<anyhow::Error>;
-type ErrorReceiver = oneshot::Receiver<anyhow::Error>;
+type ErrorSender = mpsc::Sender<anyhow::Error>;
+type ErrorReceiver = mpsc::Receiver<anyhow::Error>;
 
 const DISCOVER_PORT: u16 = 30050;
 
@@ -51,14 +50,14 @@ pub struct DaikinDiscover {
     channel: AddressSender,
     socket: Arc<UdpSocket>,
 
-    interval: Duration,
-    max_wait: Duration,
+    major_interval: Duration,
+    minor_interval: Duration,
 }
 
 impl DaikinDiscover {
     pub async fn new(configuration: &Configuration) -> Result<Self> {
-        let interval = configuration.discover_interval();
-        let max_wait = configuration.discover_timeout();
+        let major_interval = configuration.discover_major_interval();
+        let minor_interval = configuration.discover_minor_interval();
 
         let (channel, _) = broadcast::channel(16);
 
@@ -75,73 +74,34 @@ impl DaikinDiscover {
         Ok(DaikinDiscover {
             channel,
             socket,
-            interval,
-            max_wait,
+            major_interval,
+            minor_interval,
         })
     }
 
     pub async fn start(self) -> (AddressSender, ErrorReceiver) {
-        let (error_tx, error_rx) = oneshot::channel();
+        let (error_tx, error_rx) = mpsc::channel(1);
+        let this = self.clone();
+
+        let broadcast_tx = error_tx.clone();
+
+        tokio::spawn(async move {
+            this.broadcast_loop(broadcast_tx).await;
+        });
+
+        let listen_tx = error_tx.clone();
         let this = self.clone();
 
         tokio::spawn(async move {
-            this.discover_loop(error_tx).await;
+            this.listen_loop(listen_tx).await;
         });
 
         (self.channel.clone(), error_rx)
     }
 
-    pub async fn discover_loop(&self, error_tx: ErrorSender) {
-        let mut error: Option<anyhow::Error> = None;
+    pub async fn broadcast(&self, address: SocketAddr) -> Result<()> {
+        trace!("Discovering for {}", address);
 
-        // The ComfortControl iOS app sends two discover packets back-to-back about 200–250ms
-        // apart and repeats the discover process about once every two seconds.
-        loop {
-            let addresses = match broadcast_addresses() {
-                Ok(a) => a,
-                Err(e) => {
-                    error = Some(e);
-                    break;
-                }
-            };
-
-            for address in addresses {
-                trace!("Discovering for {}", address);
-
-                if let Err(e) = self.discover(address).await {
-                    error = Some(e);
-                    break;
-                }
-
-                if error.is_some() {
-                    break;
-                }
-
-                sleep(Duration::from_millis(200)).await;
-
-                if let Err(e) = self.discover(address).await {
-                    error = Some(e);
-                    break;
-                }
-            }
-
-            if error.is_some() {
-                break;
-            }
-
-            sleep(self.interval).await;
-        }
-
-        if let Some(e) = error {
-            error_tx.send(e).unwrap();
-        }
-    }
-
-    // Discover daikin units on the network broadcast `address` and send their IP addresses to
-    // `tx`.
-    //
-    // This will wait up to 50ms after the last discovered unit.
-    pub async fn discover(&self, address: SocketAddr) -> Result<()> {
         self.socket
             .send_to(b"DAIKIN_UDP/common/basic_info", address)
             .await
@@ -151,16 +111,48 @@ impl DaikinDiscover {
             .with_label_values(&[&address.ip().to_string()])
             .inc();
 
+        Ok(())
+    }
+
+    pub async fn broadcast_loop(&self, error_tx: ErrorSender) {
         loop {
-            let mut buf = vec![0; 1000];
-            let (n, a) = match timeout(self.max_wait, self.socket.recv_from(&mut buf)).await {
-                Ok(r) => r.with_context(|| {
-                    format!("Unable to read discover response send to {}", address)
-                })?,
-                Err(_) => {
-                    return Ok(());
+            let addresses = match broadcast_addresses() {
+                Ok(a) => a,
+                Err(e) => {
+                    error_tx.send(e).await.unwrap();
+                    return;
                 }
             };
+
+            for address in &addresses {
+                if let Err(e) = self.broadcast(address.clone()).await {
+                    error_tx.send(e).await.unwrap();
+                    return;
+                };
+            }
+
+            sleep(self.minor_interval).await;
+
+            for address in addresses {
+                if let Err(e) = self.broadcast(address).await {
+                    error_tx.send(e).await.unwrap();
+                    return;
+                };
+            }
+
+            sleep(self.major_interval).await;
+        }
+    }
+
+    pub async fn listen(&self) -> Result<()> {
+        loop {
+            let mut buf = vec![0; 1000];
+
+            let (n, a) = self
+                .socket
+                .recv_from(&mut buf)
+                .await
+                .context("Unable to read discover response")?;
 
             RESPONSES.with_label_values(&[&a.ip().to_string()]).inc();
 
@@ -171,14 +163,25 @@ impl DaikinDiscover {
                 a
             );
 
+            let ip = a.ip().to_string();
+
             self.channel
-                .send(a.ip().to_string())
-                .with_context(|| format!("Unable to notify of discovered unit IP {}", a))?;
+                .send(ip.clone())
+                .with_context(|| format!("Unable to notify of discovered unit IP {}", ip))?;
+        }
+    }
+
+    pub async fn listen_loop(&self, error_tx: ErrorSender) {
+        loop {
+            if let Err(e) = self.listen().await {
+                error_tx.send(e).await.unwrap();
+                break;
+            }
         }
     }
 }
 
-// Return local broadcast addresses
+// Local broadcast addresses
 fn broadcast_addresses() -> Result<Vec<SocketAddr>> {
     let ifaddrs = getifaddrs().context("Unable to find network interfaces")?;
 
@@ -187,7 +190,7 @@ fn broadcast_addresses() -> Result<Vec<SocketAddr>> {
         .filter(|ifaddr| ifaddr.broadcast.is_some())
         .map(|ifaddr| match ifaddr.broadcast.unwrap() {
             SockAddr::Inet(a) => a.ip(),
-            other => unreachable!("unhandled broadcast address {:?}", other),
+            other => unreachable!("unhandled broadcast address {:?}, nix bug?", other),
         })
         .map(|broadcast_addr| broadcast_addr.to_string().parse().unwrap())
         .map(|ipaddr| SocketAddr::new(ipaddr, DISCOVER_PORT))
