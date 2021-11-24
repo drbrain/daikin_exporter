@@ -6,7 +6,6 @@ use log::debug;
 
 use prometheus_exporter::prometheus::register_gauge_vec;
 use prometheus_exporter::prometheus::GaugeVec;
-use prometheus_exporter::Exporter;
 
 use std::net::SocketAddr;
 
@@ -140,24 +139,24 @@ lazy_static! {
 }
 
 pub struct DaikinExporter {
-    exporter: Exporter,
+    bind_address: SocketAddr,
 }
 
 impl DaikinExporter {
     pub fn new(bind_address: String) -> Self {
-        let addr: SocketAddr = bind_address
+        let bind_address: SocketAddr = bind_address
             .parse()
             .expect(&format!("can not parse listen address {}", bind_address));
 
-        let exporter = prometheus_exporter::start(addr)
-            .expect(&format!("can not start exporter on {}", bind_address));
-
-        DaikinExporter { exporter }
+        DaikinExporter { bind_address }
     }
 
     pub async fn run(&self, watcher: DaikinWatcher) {
+        let exporter = prometheus_exporter::start(self.bind_address)
+            .expect(&format!("can not start exporter on {}", self.bind_address));
+
         loop {
-            let _guard = self.exporter.wait_request();
+            let _guard = exporter.wait_request();
 
             debug!("Updating metrics");
 
