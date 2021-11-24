@@ -73,14 +73,14 @@ impl DaikinAdaptor {
 
             let mut info = self.info.lock().await;
 
-            info.insert("device_name".to_string(), device_name);
-            info.insert("power_on".to_string(), power_on);
+            info.insert("DEVICE_NAME".to_string(), device_name);
+            info.insert("POWER_ON".to_string(), power_on);
         }
 
         {
             let info = self.info.lock().await;
 
-            if !info.contains_key("device_name") {
+            if !info.contains_key("DEVICE_NAME") {
                 // We haven't retrieved the device name yet so we won't be able to assign the device
                 // label to any of the metrics we will collect below.
                 return;
@@ -103,11 +103,11 @@ impl DaikinAdaptor {
 
             let mut info = self.info.lock().await;
 
-            info.insert("mode".to_string(), mode);
-            info.insert("set_temp".to_string(), set_temp);
-            info.insert("set_humid".to_string(), set_humid);
-            info.insert("fan_rate".to_string(), fan_rate);
-            info.insert("fan_dir".to_string(), fan_dir);
+            info.insert("MODE".to_string(), mode);
+            info.insert("SET_TEMP".to_string(), set_temp);
+            info.insert("SET_HUMID".to_string(), set_humid);
+            info.insert("FAN_RATE".to_string(), fan_rate);
+            info.insert("FAN_DIR".to_string(), fan_dir);
         }
 
         if let Some(sensor_info) = self.get_info(client, "aircon/get_sensor_info").await {
@@ -117,9 +117,9 @@ impl DaikinAdaptor {
 
             let mut info = self.info.lock().await;
 
-            info.insert("unit_temp".to_string(), unit_temp);
-            info.insert("outdoor_temp".to_string(), outdoor_temp);
-            info.insert("compressor_demand".to_string(), compressor_demand);
+            info.insert("UNIT_TEMP".to_string(), unit_temp);
+            info.insert("OUTDOOR_TEMP".to_string(), outdoor_temp);
+            info.insert("COMPRESSOR_DEMAND".to_string(), compressor_demand);
         }
 
         if let Some(week_power) = self.get_info(client, "aircon/get_week_power").await {
@@ -127,7 +127,7 @@ impl DaikinAdaptor {
 
             let mut info = self.info.lock().await;
 
-            info.insert("daily_runtime".to_string(), daily_runtime);
+            info.insert("DAILY_RUNTIME".to_string(), daily_runtime);
         }
 
         if let Some(monitor_data) = self.get_info(client, "aircon/get_monitordata").await {
@@ -151,17 +151,17 @@ impl DaikinAdaptor {
 
             let mut info = self.info.lock().await;
 
-            info.insert("monitor_fan_speed".to_string(), monitor_fan_speed);
-            info.insert("monitor_rawrtmp".to_string(), monitor_rawrtmp);
-            info.insert("monitor_trtmp".to_string(), monitor_trtmp);
-            info.insert("monitor_fangl".to_string(), monitor_fangl);
-            info.insert("monitor_hetmp".to_string(), monitor_hetmp);
-            info.insert("monitor_resets".to_string(), monitor_resets);
+            info.insert("MONITOR_FAN_SPEED".to_string(), monitor_fan_speed);
+            info.insert("MONITOR_RAWRTMP".to_string(), monitor_rawrtmp);
+            info.insert("MONITOR_TRTMP".to_string(), monitor_trtmp);
+            info.insert("MONITOR_FANGL".to_string(), monitor_fangl);
+            info.insert("MONITOR_HETMP".to_string(), monitor_hetmp);
+            info.insert("MONITOR_RESETS".to_string(), monitor_resets);
             info.insert(
-                "monitor_router_disconnects".to_string(),
+                "MONITOR_ROUTER_DISCONNECTS".to_string(),
                 monitor_router_disconnects,
             );
-            info.insert("monitor_polling_errors".to_string(), monitor_polling_errors);
+            info.insert("MONITOR_POLLING_ERRORS".to_string(), monitor_polling_errors);
         }
     }
 
