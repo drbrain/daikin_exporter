@@ -24,7 +24,6 @@ use tokio::time::sleep;
 
 type AddressSender = broadcast::Sender<String>;
 type ErrorSender = mpsc::Sender<anyhow::Error>;
-type ErrorReceiver = mpsc::Receiver<anyhow::Error>;
 
 const DISCOVER_PORT: u16 = 30050;
 
@@ -79,24 +78,23 @@ impl DaikinDiscover {
         })
     }
 
-    pub async fn start(self) -> (AddressSender, ErrorReceiver) {
-        let (error_tx, error_rx) = mpsc::channel(1);
+    pub async fn start(self, error_tx: ErrorSender) -> AddressSender {
         let this = self.clone();
 
-        let broadcast_tx = error_tx.clone();
+        let broadcast_error_tx = error_tx.clone();
 
         tokio::spawn(async move {
-            this.broadcast_loop(broadcast_tx).await;
+            this.broadcast_loop(broadcast_error_tx).await;
         });
 
-        let listen_tx = error_tx.clone();
+        let listen_error_tx = error_tx.clone();
         let this = self.clone();
 
         tokio::spawn(async move {
-            this.listen_loop(listen_tx).await;
+            this.listen_loop(listen_error_tx).await;
         });
 
-        (self.channel.clone(), error_rx)
+        self.channel.clone()
     }
 
     pub async fn broadcast(&self, address: SocketAddr) -> Result<()> {
