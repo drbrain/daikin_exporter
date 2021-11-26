@@ -27,7 +27,7 @@ async fn main() -> Result<()> {
 
     DaikinExporter::new(configuration.bind_address())
         .run(watcher)
-        .await;
+        .await?;
 
     Ok(())
 }

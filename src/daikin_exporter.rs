@@ -1,5 +1,8 @@
 use crate::daikin_watcher::DaikinWatcher;
 
+use anyhow::Context;
+use anyhow::Result;
+
 use lazy_static::lazy_static;
 
 use log::debug;
@@ -151,9 +154,9 @@ impl DaikinExporter {
         DaikinExporter { bind_address }
     }
 
-    pub async fn run(&self, watcher: DaikinWatcher) {
+    pub async fn run(&self, watcher: DaikinWatcher) -> Result<()> {
         let exporter = prometheus_exporter::start(self.bind_address)
-            .expect(&format!("can not start exporter on {}", self.bind_address));
+            .with_context(|| format!("Cannot start exporter on {}", self.bind_address))?;
 
         loop {
             let _guard = exporter.wait_request();
