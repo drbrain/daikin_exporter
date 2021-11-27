@@ -1,8 +1,10 @@
 use lazy_static::lazy_static;
 
 use log::debug;
+use log::error;
 use log::trace;
 
+use prometheus::core::Collector;
 use prometheus::register_gauge_vec;
 use prometheus::register_histogram_vec;
 use prometheus::register_int_counter_vec;
@@ -21,6 +23,20 @@ use tokio::time::sleep;
 
 type Info = HashMap<String, String>;
 type DaikinResponse = Result<Info, reqwest::Error>;
+
+macro_rules! set_metric {
+    ( $metric:ident, $value:ident, $parse:ty, $device_name:ident) => {
+        if let Ok(v) = $value.parse::<$parse>() {
+            $metric.with_label_values(&[&$device_name]).set(v);
+        } else {
+            let desc = $metric.desc()[0];
+            error!(
+                "Invalid value {} for metric {} ({})",
+                $value, desc.fq_name, desc.help
+            );
+        }
+    };
+}
 
 lazy_static! {
     static ref REQUESTS: IntCounterVec = register_int_counter_vec!(
@@ -175,9 +191,7 @@ impl DaikinAdaptor {
 
             let power_on = basic_info.get("pow").unwrap().to_string();
 
-            POWER_ON
-                .with_label_values(&[&device_name])
-                .set(power_on.parse::<i64>().unwrap());
+            set_metric!(POWER_ON, power_on, i64, device_name);
         }
 
         let device_name = match &self.device_name {
@@ -205,18 +219,11 @@ impl DaikinAdaptor {
 
             let fan_dir = control_info.get("f_dir").unwrap().to_string();
 
-            MODE.with_label_values(&[&device_name])
-                .set(mode.parse::<i64>().unwrap());
-            SET_TEMP
-                .with_label_values(&[&device_name])
-                .set(set_temp.parse::<f64>().unwrap());
-            SET_HUMID
-                .with_label_values(&[&device_name])
-                .set(set_humid.parse::<i64>().unwrap());
+            set_metric!(MODE, mode, i64, device_name);
+            set_metric!(SET_TEMP, set_temp, f64, device_name);
+            set_metric!(SET_HUMID, set_humid, i64, device_name);
             FAN_RATE.with_label_values(&[&device_name]).set(fan_rate);
-            FAN_DIR
-                .with_label_values(&[&device_name])
-                .set(fan_dir.parse::<i64>().unwrap());
+            set_metric!(FAN_DIR, fan_dir, i64, device_name);
         }
 
         if let Some(sensor_info) = self.get_info(client, "aircon/get_sensor_info").await {
@@ -224,23 +231,15 @@ impl DaikinAdaptor {
             let outdoor_temp = sensor_info.get("otemp").unwrap().to_string();
             let compressor_demand = sensor_info.get("cmpfreq").unwrap().to_string();
 
-            UNIT_TEMP
-                .with_label_values(&[&device_name])
-                .set(unit_temp.parse::<f64>().unwrap());
-            OUTDOOR_TEMP
-                .with_label_values(&[&device_name])
-                .set(outdoor_temp.parse::<f64>().unwrap());
-            COMPRESSOR_DEMAND
-                .with_label_values(&[&device_name])
-                .set(compressor_demand.parse::<i64>().unwrap());
+            set_metric!(UNIT_TEMP, unit_temp, f64, device_name);
+            set_metric!(OUTDOOR_TEMP, outdoor_temp, f64, device_name);
+            set_metric!(COMPRESSOR_DEMAND, compressor_demand, i64, device_name);
         }
 
         if let Some(week_power) = self.get_info(client, "aircon/get_week_power").await {
             let daily_runtime = week_power.get("today_runtime").unwrap().to_string();
 
-            DAILY_RUNTIME
-                .with_label_values(&[&device_name])
-                .set(daily_runtime.parse::<i64>().unwrap());
+            set_metric!(DAILY_RUNTIME, daily_runtime, i64, device_name);
         }
 
         if let Some(monitor_data) = self.get_info(client, "aircon/get_monitordata").await {
@@ -262,30 +261,24 @@ impl DaikinAdaptor {
                 monitor_data.get("RouterDisconCnt").unwrap().to_string();
             let monitor_polling_errors = monitor_data.get("PollingErrCnt").unwrap().to_string();
 
-            MONITOR_FAN_SPEED
-                .with_label_values(&[&device_name])
-                .set(monitor_fan_speed.parse::<i64>().unwrap());
-            MONITOR_RAWRTMP
-                .with_label_values(&[&device_name])
-                .set(monitor_rawrtmp.parse::<i64>().unwrap());
-            MONITOR_TRTMP
-                .with_label_values(&[&device_name])
-                .set(monitor_trtmp.parse::<i64>().unwrap());
-            MONITOR_FANGL
-                .with_label_values(&[&device_name])
-                .set(monitor_fangl.parse::<i64>().unwrap());
-            MONITOR_HETMP
-                .with_label_values(&[&device_name])
-                .set(monitor_hetmp.parse::<i64>().unwrap());
-            MONITOR_RESETS
-                .with_label_values(&[&device_name])
-                .set(monitor_resets.parse::<i64>().unwrap());
-            MONITOR_ROUTER_DISCONNECTS
-                .with_label_values(&[&device_name])
-                .set(monitor_router_disconnects.parse::<i64>().unwrap());
-            MONITOR_POLLING_ERRORS
-                .with_label_values(&[&device_name])
-                .set(monitor_polling_errors.parse::<i64>().unwrap());
+            set_metric!(MONITOR_FAN_SPEED, monitor_fan_speed, i64, device_name);
+            set_metric!(MONITOR_RAWRTMP, monitor_rawrtmp, i64, device_name);
+            set_metric!(MONITOR_TRTMP, monitor_trtmp, i64, device_name);
+            set_metric!(MONITOR_FANGL, monitor_fangl, i64, device_name);
+            set_metric!(MONITOR_HETMP, monitor_hetmp, i64, device_name);
+            set_metric!(MONITOR_RESETS, monitor_resets, i64, device_name);
+            set_metric!(
+                MONITOR_ROUTER_DISCONNECTS,
+                monitor_router_disconnects,
+                i64,
+                device_name
+            );
+            set_metric!(
+                MONITOR_POLLING_ERRORS,
+                monitor_polling_errors,
+                i64,
+                device_name
+            );
         }
     }
 
