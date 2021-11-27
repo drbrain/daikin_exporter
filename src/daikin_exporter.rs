@@ -8,7 +8,10 @@ use prometheus_hyper::Server;
 use std::net::SocketAddr;
 use std::sync::Arc;
 
+use tokio::sync::mpsc;
 use tokio::sync::Notify;
+
+type ErrorSender = mpsc::Sender<anyhow::Error>;
 
 pub struct DaikinExporter {
     bind_address: SocketAddr,
@@ -31,20 +34,28 @@ impl DaikinExporter {
         Ok(exporter)
     }
 
-    async fn run(&self) {
-        info!("Starting server");
-        Server::run(
+    async fn run(&self, error_tx: ErrorSender) {
+        info!("Starting server on {}", self.bind_address);
+
+        let result = Server::run(
             Arc::new(prometheus::default_registry().clone()),
             self.bind_address,
             self.shutdown.notified(),
         )
         .await
-        .unwrap();
+        .with_context(|| format!("Failed to start server on {}", self.bind_address));
+
+        if let Err(e) = result {
+            error_tx
+                .send(e)
+                .await
+                .expect("Error channel failed unexpectedly, bug?");
+        }
     }
 
-    pub async fn start(self) {
+    pub async fn start(self, error_tx: ErrorSender) {
         tokio::spawn(async move {
-            self.run().await;
+            self.run(error_tx).await;
         });
     }
 }

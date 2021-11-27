@@ -117,14 +117,20 @@ impl DaikinDiscover {
             let addresses = match broadcast_addresses() {
                 Ok(a) => a,
                 Err(e) => {
-                    error_tx.send(e).await.unwrap();
+                    error_tx
+                        .send(e)
+                        .await
+                        .expect("Error channel failed unexpectedly, bug?");
                     return;
                 }
             };
 
             for address in &addresses {
                 if let Err(e) = self.broadcast(address.clone()).await {
-                    error_tx.send(e).await.unwrap();
+                    error_tx
+                        .send(e)
+                        .await
+                        .expect("Error channel failed unexpectedly, bug?");
                     return;
                 };
             }
@@ -133,7 +139,10 @@ impl DaikinDiscover {
 
             for address in addresses {
                 if let Err(e) = self.broadcast(address).await {
-                    error_tx.send(e).await.unwrap();
+                    error_tx
+                        .send(e)
+                        .await
+                        .expect("Error channel failed unexpectedly, bug?");
                     return;
                 };
             }
@@ -172,7 +181,10 @@ impl DaikinDiscover {
     pub async fn listen_loop(&self, error_tx: ErrorSender) {
         loop {
             if let Err(e) = self.listen().await {
-                error_tx.send(e).await.unwrap();
+                error_tx
+                    .send(e)
+                    .await
+                    .expect("Error channel failed unexpectedly, bug?");
                 break;
             }
         }

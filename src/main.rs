@@ -36,7 +36,7 @@ async fn main() -> Result<()> {
     watcher.start().await;
 
     DaikinExporter::new(configuration.bind_address())?
-        .start()
+        .start(error_tx.clone())
         .await;
 
     let exit_code = wait_for_error(error_rx).await;
