@@ -8,8 +8,8 @@ use lazy_static::lazy_static;
 use nix::ifaddrs::getifaddrs;
 use nix::sys::socket::SockAddr;
 
-use prometheus_exporter::prometheus::register_counter_vec;
-use prometheus_exporter::prometheus::CounterVec;
+use prometheus::register_int_counter_vec;
+use prometheus::IntCounterVec;
 
 use std::net::SocketAddr;
 use std::sync::Arc;
@@ -28,13 +28,13 @@ type ErrorSender = mpsc::Sender<anyhow::Error>;
 const DISCOVER_PORT: u16 = 30050;
 
 lazy_static! {
-    static ref REQUESTS: CounterVec = register_counter_vec!(
+    static ref REQUESTS: IntCounterVec = register_int_counter_vec!(
         "daikin_udp_discover_requests_total",
         "Number of UDP discover requests made to Daikin adaptors",
         &["address"],
     )
     .unwrap();
-    static ref RESPONSES: CounterVec = register_counter_vec!(
+    static ref RESPONSES: IntCounterVec = register_int_counter_vec!(
         "daikin_udp_discover_responses_total",
         "Number of UDP discover responses read from Daikin adaptors",
         &["host"],

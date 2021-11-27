@@ -1,32 +1,35 @@
 use lazy_static::lazy_static;
 
 use log::debug;
+use log::trace;
 
-use prometheus_exporter::prometheus::register_counter_vec;
-use prometheus_exporter::prometheus::register_histogram_vec;
-use prometheus_exporter::prometheus::CounterVec;
-use prometheus_exporter::prometheus::HistogramVec;
+use prometheus::register_gauge_vec;
+use prometheus::register_histogram_vec;
+use prometheus::register_int_counter_vec;
+use prometheus::register_int_gauge_vec;
+use prometheus::GaugeVec;
+use prometheus::HistogramVec;
+use prometheus::IntCounterVec;
+use prometheus::IntGaugeVec;
 
 use reqwest::Client;
 
 use std::collections::HashMap;
-use std::sync::Arc;
 use std::time::Duration;
 
-use tokio::sync::Mutex;
 use tokio::time::sleep;
 
 type Info = HashMap<String, String>;
 type DaikinResponse = Result<Info, reqwest::Error>;
 
 lazy_static! {
-    static ref REQUESTS: CounterVec = register_counter_vec!(
+    static ref REQUESTS: IntCounterVec = register_int_counter_vec!(
         "daikin_http_requests_total",
         "Number of HTTP requests made to Daikin adaptors",
         &["host", "path"],
     )
     .unwrap();
-    static ref ERRORS: CounterVec = register_counter_vec!(
+    static ref ERRORS: IntCounterVec = register_int_counter_vec!(
         "daikin_http_request_errors_total",
         "Number of HTTP request errors made to Daikin adaptors",
         &["host", "path", "error_type"],
@@ -38,27 +41,125 @@ lazy_static! {
         &["host", "path"],
     )
     .unwrap();
+    static ref POWER_ON: IntGaugeVec =
+        register_int_gauge_vec!("daikin_power_on", "Daikin unit is on", &["device"]).unwrap();
+    static ref MODE: IntGaugeVec = register_int_gauge_vec!(
+        "daikin_mode",
+        "Daikin mode (0, 1, 7 auto, 2 dehumidify, 3 cool, 4 heat, 6 fan)",
+        &["device"]
+    )
+    .unwrap();
+    static ref SET_HUMID: IntGaugeVec = register_int_gauge_vec!(
+        "daikin_set_humidity_relative",
+        "Humidity set-point",
+        &["device"]
+    )
+    .unwrap();
+    static ref SET_TEMP: GaugeVec = register_gauge_vec!(
+        "daikin_set_temperature_degrees",
+        "Temperature set-point",
+        &["device"]
+    )
+    .unwrap();
+    static ref FAN_RATE: IntGaugeVec = register_int_gauge_vec!(
+        "daikin_fan_rate",
+        "Daikin fan rate (1 auto, 2 silence, 3–7 level 1–5)",
+        &["device"]
+    )
+    .unwrap();
+    static ref FAN_DIR: IntGaugeVec = register_int_gauge_vec!(
+        "daikin_fan_direction",
+        "Daikin fan direction (0 stopped, 1 vertical, 2 horizontal, 3 both)",
+        &["device"]
+    )
+    .unwrap();
+    static ref UNIT_TEMP: GaugeVec = register_gauge_vec!(
+        "daikin_unit_temperature_degrees",
+        "Unit temperature",
+        &["device"]
+    )
+    .unwrap();
+    static ref OUTDOOR_TEMP: GaugeVec = register_gauge_vec!(
+        "daikin_outdoor_temperature_degrees",
+        "Outdoor temperature",
+        &["device"]
+    )
+    .unwrap();
+    static ref COMPRESSOR_DEMAND: IntGaugeVec = register_int_gauge_vec!(
+        "daikin_compressor_demand_percent",
+        "Compressor demand (0–100)",
+        &["device"]
+    )
+    .unwrap();
+    static ref DAILY_RUNTIME: IntGaugeVec =
+        register_int_gauge_vec!("daikin_daily_runtime_minutes", "Daily runtime", &["device"])
+            .unwrap();
+    static ref MONITOR_FAN_SPEED: IntGaugeVec = register_int_gauge_vec!(
+        "daikin_monitor_fan_speed_percent",
+        "Unit fan speed (0–100)",
+        &["device"]
+    )
+    .unwrap();
+    static ref MONITOR_RAWRTMP: IntGaugeVec = register_int_gauge_vec!(
+        "daikin_monitor_rawr_temperature_degrees",
+        "Room air temperature",
+        &["device"]
+    )
+    .unwrap();
+    static ref MONITOR_TRTMP: IntGaugeVec = register_int_gauge_vec!(
+        "daikin_monitor_tr_temperature_degrees",
+        "tr tempurature",
+        &["device"]
+    )
+    .unwrap();
+    static ref MONITOR_FANGL: IntGaugeVec =
+        register_int_gauge_vec!("daikin_monitor_fangl", "fangl", &["device"]).unwrap();
+    static ref MONITOR_HETMP: IntGaugeVec = register_int_gauge_vec!(
+        "daikin_monitor_heat_exchanger_temperature_degrees",
+        "Heat exchanger",
+        &["device"]
+    )
+    .unwrap();
+    static ref MONITOR_RESETS: IntGaugeVec = register_int_gauge_vec!(
+        "daikin_monitor_reset_count",
+        "Wifi adatptor resets",
+        &["device"]
+    )
+    .unwrap();
+    static ref MONITOR_ROUTER_DISCONNECTS: IntGaugeVec = register_int_gauge_vec!(
+        "daikin_monitor_router_disconnect_count",
+        "Router disconnections",
+        &["device"]
+    )
+    .unwrap();
+    static ref MONITOR_POLLING_ERRORS: IntGaugeVec = register_int_gauge_vec!(
+        "daikin_monitor_polling_error_count",
+        "Polling errors",
+        &["device"]
+    )
+    .unwrap();
 }
 
 #[derive(Clone)]
 pub struct DaikinAdaptor {
     pub host: String,
     interval: Duration,
-    pub info: Arc<Mutex<Info>>,
+
+    device_name: Option<String>,
 }
 
 impl DaikinAdaptor {
     pub fn new(host: String, interval: Duration) -> Self {
-        let info = Arc::new(Mutex::new(HashMap::new()));
+        let device_name = None;
 
         DaikinAdaptor {
             host,
             interval,
-            info,
+            device_name,
         }
     }
 
-    pub async fn read_loop(&self, client: Client) {
+    pub async fn read_loop(&mut self, client: Client) {
         loop {
             sleep(self.interval).await;
 
@@ -66,48 +167,56 @@ impl DaikinAdaptor {
         }
     }
 
-    async fn read_device(&self, client: &Client) {
+    async fn read_device(&mut self, client: &Client) {
         if let Some(basic_info) = self.get_info(client, "common/basic_info").await {
             let device_name = percent_decode(basic_info.get("name").unwrap());
+
+            self.device_name = Some(device_name.clone());
+
             let power_on = basic_info.get("pow").unwrap().to_string();
 
-            let mut info = self.info.lock().await;
-
-            info.insert("DEVICE_NAME".to_string(), device_name);
-            info.insert("POWER_ON".to_string(), power_on);
+            POWER_ON
+                .with_label_values(&[&device_name])
+                .set(power_on.parse::<i64>().unwrap());
         }
 
-        {
-            let info = self.info.lock().await;
-
-            if !info.contains_key("DEVICE_NAME") {
-                // We haven't retrieved the device name yet so we won't be able to assign the device
-                // label to any of the metrics we will collect below.
+        let device_name = match &self.device_name {
+            Some(name) => name,
+            None => {
+                // We haven't retrieved the device name yet so we won't be able to assign the
+                // device label to any of the metrics we will collect below.
                 return;
             }
-        }
+        };
 
         if let Some(control_info) = self.get_info(client, "aircon/get_control_info").await {
             let set_temp = control_info.get("stemp").unwrap().to_string();
             let set_humid = control_info.get("shum").unwrap().to_string();
             let mode = control_info.get("mode").unwrap().to_string();
-            let mut fan_rate = control_info.get("f_rate").unwrap().to_string();
+            let fan_rate = control_info.get("f_rate").unwrap().to_string();
 
-            if fan_rate == "A" {
-                fan_rate = "1".to_string();
+            let fan_rate = if fan_rate == "A" {
+                1
             } else if fan_rate == "B" {
-                fan_rate = "2".to_string();
-            }
+                2
+            } else {
+                fan_rate.parse::<i64>().unwrap()
+            };
 
             let fan_dir = control_info.get("f_dir").unwrap().to_string();
 
-            let mut info = self.info.lock().await;
-
-            info.insert("MODE".to_string(), mode);
-            info.insert("SET_TEMP".to_string(), set_temp);
-            info.insert("SET_HUMID".to_string(), set_humid);
-            info.insert("FAN_RATE".to_string(), fan_rate);
-            info.insert("FAN_DIR".to_string(), fan_dir);
+            MODE.with_label_values(&[&device_name])
+                .set(mode.parse::<i64>().unwrap());
+            SET_TEMP
+                .with_label_values(&[&device_name])
+                .set(set_temp.parse::<f64>().unwrap());
+            SET_HUMID
+                .with_label_values(&[&device_name])
+                .set(set_humid.parse::<i64>().unwrap());
+            FAN_RATE.with_label_values(&[&device_name]).set(fan_rate);
+            FAN_DIR
+                .with_label_values(&[&device_name])
+                .set(fan_dir.parse::<i64>().unwrap());
         }
 
         if let Some(sensor_info) = self.get_info(client, "aircon/get_sensor_info").await {
@@ -115,19 +224,23 @@ impl DaikinAdaptor {
             let outdoor_temp = sensor_info.get("otemp").unwrap().to_string();
             let compressor_demand = sensor_info.get("cmpfreq").unwrap().to_string();
 
-            let mut info = self.info.lock().await;
-
-            info.insert("UNIT_TEMP".to_string(), unit_temp);
-            info.insert("OUTDOOR_TEMP".to_string(), outdoor_temp);
-            info.insert("COMPRESSOR_DEMAND".to_string(), compressor_demand);
+            UNIT_TEMP
+                .with_label_values(&[&device_name])
+                .set(unit_temp.parse::<f64>().unwrap());
+            OUTDOOR_TEMP
+                .with_label_values(&[&device_name])
+                .set(outdoor_temp.parse::<f64>().unwrap());
+            COMPRESSOR_DEMAND
+                .with_label_values(&[&device_name])
+                .set(compressor_demand.parse::<i64>().unwrap());
         }
 
         if let Some(week_power) = self.get_info(client, "aircon/get_week_power").await {
             let daily_runtime = week_power.get("today_runtime").unwrap().to_string();
 
-            let mut info = self.info.lock().await;
-
-            info.insert("DAILY_RUNTIME".to_string(), daily_runtime);
+            DAILY_RUNTIME
+                .with_label_values(&[&device_name])
+                .set(daily_runtime.parse::<i64>().unwrap());
         }
 
         if let Some(monitor_data) = self.get_info(client, "aircon/get_monitordata").await {
@@ -149,19 +262,30 @@ impl DaikinAdaptor {
                 monitor_data.get("RouterDisconCnt").unwrap().to_string();
             let monitor_polling_errors = monitor_data.get("PollingErrCnt").unwrap().to_string();
 
-            let mut info = self.info.lock().await;
-
-            info.insert("MONITOR_FAN_SPEED".to_string(), monitor_fan_speed);
-            info.insert("MONITOR_RAWRTMP".to_string(), monitor_rawrtmp);
-            info.insert("MONITOR_TRTMP".to_string(), monitor_trtmp);
-            info.insert("MONITOR_FANGL".to_string(), monitor_fangl);
-            info.insert("MONITOR_HETMP".to_string(), monitor_hetmp);
-            info.insert("MONITOR_RESETS".to_string(), monitor_resets);
-            info.insert(
-                "MONITOR_ROUTER_DISCONNECTS".to_string(),
-                monitor_router_disconnects,
-            );
-            info.insert("MONITOR_POLLING_ERRORS".to_string(), monitor_polling_errors);
+            MONITOR_FAN_SPEED
+                .with_label_values(&[&device_name])
+                .set(monitor_fan_speed.parse::<i64>().unwrap());
+            MONITOR_RAWRTMP
+                .with_label_values(&[&device_name])
+                .set(monitor_rawrtmp.parse::<i64>().unwrap());
+            MONITOR_TRTMP
+                .with_label_values(&[&device_name])
+                .set(monitor_trtmp.parse::<i64>().unwrap());
+            MONITOR_FANGL
+                .with_label_values(&[&device_name])
+                .set(monitor_fangl.parse::<i64>().unwrap());
+            MONITOR_HETMP
+                .with_label_values(&[&device_name])
+                .set(monitor_hetmp.parse::<i64>().unwrap());
+            MONITOR_RESETS
+                .with_label_values(&[&device_name])
+                .set(monitor_resets.parse::<i64>().unwrap());
+            MONITOR_ROUTER_DISCONNECTS
+                .with_label_values(&[&device_name])
+                .set(monitor_router_disconnects.parse::<i64>().unwrap());
+            MONITOR_POLLING_ERRORS
+                .with_label_values(&[&device_name])
+                .set(monitor_polling_errors.parse::<i64>().unwrap());
         }
     }
 
@@ -230,7 +354,10 @@ fn decode(encoded: &String) -> String {
 }
 
 async fn result_hash(response: reqwest::Response) -> DaikinResponse {
+    let url = response.url().clone();
     let body = response.text().await?;
+
+    trace!("Request {} received: {}", url, body);
 
     let pairs = body.split(",");
 

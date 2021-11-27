@@ -48,12 +48,6 @@ impl DaikinWatcher {
         }
     }
 
-    pub async fn adaptors(&self) -> Vec<DaikinAdaptor> {
-        let adaptors = self.adaptors.lock().await;
-
-        adaptors.values().map(|a| a.clone()).collect()
-    }
-
     pub async fn start(&mut self) {
         if let Some(hosts) = self.hosts.clone() {
             for host in hosts {
@@ -85,7 +79,7 @@ impl DaikinWatcher {
         let daikin_adaptor = DaikinAdaptor::new(host.clone(), self.interval);
 
         let client = self.client.clone();
-        let adaptor = daikin_adaptor.clone();
+        let mut adaptor = daikin_adaptor.clone();
 
         tokio::spawn(async move {
             adaptor.read_loop(client).await;
