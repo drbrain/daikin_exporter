@@ -38,6 +38,22 @@ macro_rules! set_metric {
     };
 }
 
+macro_rules! set_metric_tenth {
+    ( $metric:ident, $value:ident, $parse:ty, $device_name:ident) => {
+        if let Ok(v) = $value.parse::<$parse>() {
+            $metric
+                .with_label_values(&[&$device_name])
+                .set(v / 10 as $parse);
+        } else {
+            let desc = $metric.desc()[0];
+            error!(
+                "Invalid value {} for metric {} ({})",
+                $value, desc.fq_name, desc.help
+            );
+        }
+    };
+}
+
 lazy_static! {
     static ref REQUESTS: IntCounterVec = register_int_counter_vec!(
         "daikin_http_requests_total",
@@ -262,10 +278,10 @@ impl DaikinAdaptor {
             let monitor_polling_errors = monitor_data.get("PollingErrCnt").unwrap().to_string();
 
             set_metric!(MONITOR_FAN_SPEED, monitor_fan_speed, i64, device_name);
-            set_metric!(MONITOR_RAWRTMP, monitor_rawrtmp, i64, device_name);
-            set_metric!(MONITOR_TRTMP, monitor_trtmp, i64, device_name);
+            set_metric_tenth!(MONITOR_RAWRTMP, monitor_rawrtmp, i64, device_name);
+            set_metric_tenth!(MONITOR_TRTMP, monitor_trtmp, i64, device_name);
             set_metric!(MONITOR_FANGL, monitor_fangl, i64, device_name);
-            set_metric!(MONITOR_HETMP, monitor_hetmp, i64, device_name);
+            set_metric_tenth!(MONITOR_HETMP, monitor_hetmp, i64, device_name);
             set_metric!(MONITOR_RESETS, monitor_resets, i64, device_name);
             set_metric!(
                 MONITOR_ROUTER_DISCONNECTS,
