@@ -67,7 +67,7 @@ impl DaikinWatcher {
         });
     }
 
-    async fn start_adaptor(&self, host: &String) {
+    async fn start_adaptor(&self, host: &str) {
         let mut adaptors = self.adaptors.lock().await;
 
         if adaptors.contains_key(host) {
@@ -76,7 +76,7 @@ impl DaikinWatcher {
 
         info!("Watching Daikin adaptor {}", host);
 
-        let daikin_adaptor = DaikinAdaptor::new(host.clone(), self.interval);
+        let daikin_adaptor = DaikinAdaptor::new(host.to_string(), self.interval);
 
         let client = self.client.clone();
         let mut adaptor = daikin_adaptor.clone();

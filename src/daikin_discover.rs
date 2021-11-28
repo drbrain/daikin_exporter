@@ -88,14 +88,14 @@ impl DaikinDiscover {
             this.broadcast_loop(broadcast_error_tx).await;
         });
 
-        let listen_error_tx = error_tx.clone();
+        let listen_error_tx = error_tx;
         let this = self.clone();
 
         tokio::spawn(async move {
             this.listen_loop(listen_error_tx).await;
         });
 
-        self.channel.clone()
+        self.channel
     }
 
     pub async fn broadcast(&self, address: SocketAddr) -> Result<()> {
@@ -126,8 +126,8 @@ impl DaikinDiscover {
                 }
             };
 
-            for address in &addresses {
-                if let Err(e) = self.broadcast(address.clone()).await {
+            for address in &addresses{
+                if let Err(e) = self.broadcast(*address).await {
                     error_tx
                         .send(e)
                         .await

@@ -336,8 +336,8 @@ impl DaikinAdaptor {
 
 // Decodes "%41%42" to "AB"
 
-fn percent_decode(encoded: &String) -> String {
-    let mut encoded = encoded.split("%");
+fn percent_decode(encoded: &str) -> String {
+    let mut encoded = encoded.split('%');
 
     encoded.next(); // skip leading empty value
 
@@ -350,7 +350,7 @@ fn percent_decode(encoded: &String) -> String {
 
 // Decodes "4142" to "AB"
 
-fn decode(encoded: &String) -> String {
+fn decode(encoded: &str) -> String {
     let pairs = encoded.len() / 2;
     let mut decoded = Vec::with_capacity(pairs);
 
@@ -368,12 +368,12 @@ async fn result_hash(response: reqwest::Response) -> DaikinResponse {
 
     trace!("Request {} received: {}", url, body);
 
-    let pairs = body.split(",");
+    let pairs = body.split(',');
 
     let mut result = HashMap::new();
 
     for pair in pairs {
-        let mut entry = pair.split("=");
+        let mut entry = pair.split('=');
 
         let key = entry.next().unwrap().to_string();
         let value = entry.next().unwrap().to_string();
