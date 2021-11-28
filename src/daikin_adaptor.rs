@@ -31,8 +31,8 @@ macro_rules! set_metric {
         } else {
             let desc = $metric.desc()[0];
             error!(
-                "Invalid value {} for metric {} ({})",
-                $value, desc.fq_name, desc.help
+                "Invalid value {} for metric {} {} ({})",
+                $value, $device_name, desc.fq_name, desc.help
             );
         }
     };
@@ -47,8 +47,8 @@ macro_rules! set_metric_tenth {
         } else {
             let desc = $metric.desc()[0];
             error!(
-                "Invalid value {} for metric {} ({})",
-                $value, desc.fq_name, desc.help
+                "Invalid value {} for metric {} {} ({})",
+                $value, $device_name, desc.fq_name, desc.help
             );
         }
     };
