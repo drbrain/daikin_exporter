@@ -238,7 +238,7 @@ impl DaikinAdaptor {
             set_metric!(MODE, mode, i64, device_name);
             set_metric!(SET_TEMP, set_temp, f64, device_name);
             set_metric!(SET_HUMID, set_humid, i64, device_name);
-            FAN_RATE.with_label_values(&[&device_name]).set(fan_rate);
+            FAN_RATE.with_label_values(&[device_name]).set(fan_rate);
             set_metric!(FAN_DIR, fan_dir, i64, device_name);
         }
 

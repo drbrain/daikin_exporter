@@ -15,6 +15,7 @@ use std::net::SocketAddr;
 use std::sync::Arc;
 use std::time::Duration;
 
+use log::debug;
 use log::error;
 use log::trace;
 
@@ -80,26 +81,30 @@ impl DaikinDiscover {
     }
 
     pub async fn start(self, error_tx: ErrorSender) -> AddressSender {
-        let this = self.clone();
-
-        let broadcast_error_tx = error_tx.clone();
-
-        tokio::spawn(async move {
-            this.broadcast_loop(broadcast_error_tx).await;
-        });
-
-        let listen_error_tx = error_tx;
+        let listen_error_tx = error_tx.clone();
         let this = self.clone();
 
         tokio::spawn(async move {
             this.listen_loop(listen_error_tx).await;
         });
 
+        let this = self.clone();
+        let broadcast_error_tx = error_tx;
+
+        tokio::spawn(async move {
+            // wait a bit daikin_watcher has not subscribed yet
+            if this.channel.receiver_count() == 0 {
+                sleep(Duration::from_millis(100)).await;
+            }
+
+            this.broadcast_loop(broadcast_error_tx).await;
+        });
+
         self.channel
     }
 
     pub async fn broadcast(&self, address: SocketAddr) -> Result<()> {
-        trace!("Discovering for {}", address);
+        trace!("Sending discovery broadcast to {}", address);
 
         self.socket
             .send_to(b"DAIKIN_UDP/common/basic_info", address)
@@ -114,6 +119,8 @@ impl DaikinDiscover {
     }
 
     pub async fn broadcast_loop(&self, error_tx: ErrorSender) {
+        debug!("Starting discovery broadcast loop");
+
         loop {
             let addresses = match broadcast_addresses() {
                 Ok(a) => a,
@@ -126,7 +133,7 @@ impl DaikinDiscover {
                 }
             };
 
-            for address in &addresses{
+            for address in &addresses {
                 if let Err(e) = self.broadcast(*address).await {
                     error_tx
                         .send(e)
@@ -182,6 +189,8 @@ impl DaikinDiscover {
     }
 
     pub async fn listen_loop(&self, error_tx: ErrorSender) {
+        debug!("Starting discovery listen loop");
+
         loop {
             if let Err(e) = self.listen().await {
                 error_tx
