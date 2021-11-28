@@ -15,6 +15,7 @@ use std::net::SocketAddr;
 use std::sync::Arc;
 use std::time::Duration;
 
+use log::error;
 use log::trace;
 
 use tokio::net::UdpSocket;
@@ -172,9 +173,11 @@ impl DaikinDiscover {
 
             let ip = a.ip().to_string();
 
-            self.channel
-                .send(ip.clone())
-                .with_context(|| format!("Unable to notify of discovered unit IP {}", ip))?;
+            if let Err(e) = self.channel.send(ip.clone()) {
+                // On startup there may be no subscribers to receive the discovered IP.  Since this
+                // is retried eventually we can wait around for next time.
+                error!("Unable to notify of discovered unit IP {}: {:?}", ip, e);
+            }
         }
     }
 
