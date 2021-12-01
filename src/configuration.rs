@@ -56,9 +56,9 @@ impl Configuration {
     }
 
     // Interval between HVAC unit data refreshes.  This should be about twice the scrape interval.
-    // Defaults to 2 seconds.
+    // Defaults to 7.5 seconds.
     pub fn refresh_interval(&self) -> std::time::Duration {
-        let interval = self.refresh_interval.unwrap_or(2000);
+        let interval = self.refresh_interval.unwrap_or(7500);
 
         std::time::Duration::from_millis(interval)
     }
