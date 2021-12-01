@@ -3,7 +3,7 @@ use serde::Deserialize;
 use std::fs;
 use std::path::Path;
 
-#[derive(Deserialize)]
+#[derive(Default, Deserialize)]
 pub struct Configuration {
     bind_address: Option<String>,
     hosts: Option<Vec<String>>,
@@ -22,12 +22,10 @@ impl Configuration {
     }
 
     // Load configuration from the next argument in the environment.
-    /// TODO return anyhow::Result<Self> and exit from the caller
     pub fn load_from_next_arg() -> Self {
         let file = match std::env::args().nth(1) {
             None => {
-                eprintln!("You must provide a configuration file");
-                std::process::exit(1);
+                return Configuration::default();
             }
             Some(f) => f,
         };
@@ -57,7 +55,8 @@ impl Configuration {
         std::time::Duration::from_millis(interval)
     }
 
-    // Interval between HVAC unit data refreshes.  Defaults to 2 seconds.
+    // Interval between HVAC unit data refreshes.  This should be about twice the scrape interval.
+    // Defaults to 2 seconds.
     pub fn refresh_interval(&self) -> std::time::Duration {
         let interval = self.refresh_interval.unwrap_or(2000);
 
