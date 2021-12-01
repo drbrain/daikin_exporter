@@ -6,15 +6,18 @@ application.
 
 ## Configuration
 
+You may provide a toml-format configuration file as the first argument to
+`daikin_exporter`.  The only argument you will probably need to set is the
+`refresh_interval` which should be about half the prometheus `scrape_interval`.
+
 The below values are defaults (except `hosts`, it's commented out and provided
 as an example).  All interval values are in milliseconds.
 
 ```toml
 discover_major_interval = 300000
 discover_minor_interval = 200
-refresh_interval = 2000
+refresh_interval = 7500
 refresh_timeout = 250
-# hosts = ["192.0.2.10", "192.0.2.11"]
 ```
 
 The `discover_major_interval` is the long interval between discover broadcast
@@ -27,8 +30,8 @@ The ComfortControl iOS app sends two requests about 200 milliseconds apart,
 then repeats the broadcast about 3 seconds later.  To avoid excessive UDP
 traffic the exporter is much more conservative for the major interval.
 
-The `refresh_interval` is the interval in ms between unit refreshes.  The
-default is 2 seconds.
+The `refresh_interval` is the interval in ms between unit refreshes and should
+be half the prometheus `scrape_interval`.  The default is 7.5 seconds.
 
 The `refresh_timeout` is the time in ms to wait for a response before ignoring
 the refresh attempt.  The default is 250 milliseconds.
