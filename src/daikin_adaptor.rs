@@ -19,7 +19,8 @@ use reqwest::Client;
 use std::collections::HashMap;
 use std::time::Duration;
 
-use tokio::time::sleep;
+use tokio::time::interval;
+use tokio::time::MissedTickBehavior;
 
 type Info = HashMap<String, String>;
 type DaikinResponse = Result<Info, reqwest::Error>;
@@ -192,8 +193,11 @@ impl DaikinAdaptor {
     }
 
     pub async fn read_loop(&mut self, client: Client) {
+        let mut interval = interval(self.interval);
+        interval.set_missed_tick_behavior(MissedTickBehavior::Skip);
+
         loop {
-            sleep(self.interval).await;
+            interval.tick().await;
 
             self.read_device(&client).await;
         }

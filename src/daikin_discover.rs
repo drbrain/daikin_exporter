@@ -22,7 +22,9 @@ use log::trace;
 use tokio::net::UdpSocket;
 use tokio::sync::broadcast;
 use tokio::sync::mpsc;
+use tokio::time::interval;
 use tokio::time::sleep;
+use tokio::time::MissedTickBehavior;
 
 type AddressSender = broadcast::Sender<String>;
 type ErrorSender = mpsc::Sender<anyhow::Error>;
@@ -120,6 +122,8 @@ impl DaikinDiscover {
 
     pub async fn broadcast_loop(&self, error_tx: ErrorSender) {
         debug!("Starting discovery broadcast loop");
+        let mut interval = interval(self.major_interval);
+        interval.set_missed_tick_behavior(MissedTickBehavior::Skip);
 
         loop {
             let addresses = match broadcast_addresses() {
@@ -155,7 +159,7 @@ impl DaikinDiscover {
                 };
             }
 
-            sleep(self.major_interval).await;
+            interval.tick().await;
         }
     }
 
