@@ -7,6 +7,7 @@ use std::path::Path;
 pub struct Configuration {
     bind_address: Option<String>,
     hosts: Option<Vec<String>>,
+    discover_bind_address: Option<String>,
     discover_major_interval: Option<u64>,
     discover_minor_interval: Option<u64>,
     refresh_interval: Option<u64>,
@@ -38,6 +39,14 @@ impl Configuration {
         self.bind_address
             .as_ref()
             .unwrap_or(&"0.0.0.0:9150".to_string())
+            .to_string()
+    }
+
+    // Bind address for Daikin unit discovery
+    pub fn discover_bind_address(&self) -> String {
+        self.discover_bind_address
+            .as_ref()
+            .unwrap_or(&"0.0.0.0:0".to_string())
             .to_string()
     }
 

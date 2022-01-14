@@ -6,6 +6,7 @@ use crate::Configuration;
 use lazy_static::lazy_static;
 
 use nix::ifaddrs::getifaddrs;
+use nix::sys::socket::InetAddr;
 use nix::sys::socket::SockAddr;
 
 use prometheus::register_int_counter_vec;
@@ -64,7 +65,7 @@ impl DaikinDiscover {
 
         let (channel, _) = broadcast::channel(16);
 
-        let socket = UdpSocket::bind("0.0.0.0:0")
+        let socket = UdpSocket::bind(configuration.discover_bind_address())
             .await
             .context("Unable to start Daikin discovery")?;
 
@@ -213,7 +214,7 @@ fn broadcast_addresses() -> Result<Vec<SocketAddr>> {
 
     let broadcast_addresses = ifaddrs
         .into_iter()
-        .filter(|ifaddr| ifaddr.broadcast.is_some())
+        .filter(|ifaddr| matches!(ifaddr.broadcast, Some(SockAddr::Inet(InetAddr::V4(_)))))
         .map(|ifaddr| match ifaddr.broadcast.unwrap() {
             SockAddr::Inet(a) => a.ip(),
             other => unreachable!("unhandled broadcast address {:?}, nix bug?", other),
