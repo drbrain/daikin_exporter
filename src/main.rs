@@ -22,6 +22,7 @@ use log::error;
 use prometheus::register_gauge;
 use prometheus::Gauge;
 
+use tokio::signal::ctrl_c;
 use tokio::sync::mpsc;
 
 use std::time::SystemTime;
@@ -60,6 +61,12 @@ async fn main() -> Result<()> {
     if let Some(duration) = start_time {
         START_TIME.set(duration.as_secs_f64());
     }
+
+    tokio::spawn(async {
+        ctrl_c().await.unwrap();
+
+        std::process::exit(0);
+    });
 
     let exit_code = wait_for_error(error_rx).await;
 
