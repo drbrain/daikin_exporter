@@ -18,6 +18,7 @@ use std::time::Duration;
 
 use log::debug;
 use log::error;
+use log::info;
 use log::trace;
 
 use tokio::net::UdpSocket;
@@ -74,6 +75,11 @@ impl DaikinDiscover {
             .context("Unable to start Daikin discovery")?;
 
         let socket = Arc::new(socket);
+
+        info!(
+            "Listening for units on {}",
+            configuration.discover_bind_address()
+        );
 
         Ok(DaikinDiscover {
             channel,
