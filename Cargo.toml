@@ -1,7 +1,13 @@
 [package]
 name = "daikin_exporter"
-version = "0.1.0"
+version = "1.0.0"
 edition = "2018"
+authors = ["Eric Hodel"]
+description = "Prometheus exporter for Daikin ComfontControl wifi adapters"
+homepage = "https://github.com/drbrain/daikin_exporter"
+repository = "https://github.com/drbrain/daikin_exporter"
+license = "MIT"
+keywords = ["prometheus", "exporter", "daikin"]
 
 [dependencies]
 anyhow           = "1.0"
