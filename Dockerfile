@@ -1,4 +1,4 @@
-FROM rust:1.58-slim-buster AS builder
+FROM --platform=$BUILDPLATFORM rust:1.58-slim-buster AS builder
 
 RUN apt-get update -qq && apt-get -qqy install pkg-config libssl-dev && rm -rf /var/cache/apt/* /var/lib/apt/*
 

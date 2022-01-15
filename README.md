@@ -20,6 +20,9 @@ refresh_interval = 7500
 refresh_timeout = 250
 ```
 
+The `discover_bind_address` sets the address and port the exporter will listen
+on for responses to discovery requests.  The default is `0.0.0.0:0`.
+
 The `discover_major_interval` is the long interval between discover broadcast
 requests.  The default is 5 minutes.
 
@@ -46,4 +49,20 @@ frequent timeouts.
 
 Values are cached between refreshes so if a unit times-out stale data will be
 returned.
+
+## Docker
+
+There is a [docker image](https://hub.docker.com/r/drbrain/daikin_exporter) for
+this exporter.  Run it with:
+
+```
+docker run --rm -it --network=host daikin_exporter:latest
+```
+
+`daikin.docker.toml` is embedded as `/daikin.toml` in the image.  You can modify
+it to your liking and mount it atop the existing one.
+
+By default the `daikin_exporter` image needs host networking to discover daikin
+units through UDP broadcasts.  If you give your daikin units static IPs and
+configure the `hosts` entry in `daikin.toml`.
 
