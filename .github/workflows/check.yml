@@ -71,6 +71,4 @@ jobs:
         with:
           push: false
           platforms: linux/amd64,linux/arm/v7
-          build-args: |
-            GITHUB_SHA=${{ github.sha }}
           tags: drbrain/daikin_exporter:devel

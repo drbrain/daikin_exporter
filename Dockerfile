@@ -10,15 +10,6 @@ RUN cargo build --release
 
 FROM debian:buster-slim AS release
 
-ARG GITHUB_SHA
-
-LABEL org.label-schema.schema-version = "1.0"
-LABEL org.label-schema.vcs-ref = "${GITHUB_SHA}"
-LABEL org.label-schema.name = "daikin_exporter"
-LABEL org.label-schema.url = "https://github.com/drbrain/daikin_exporter"
-LABEL org.label-schema.vcs-url = "https://github.com/drbrain/daikin_exporter"
-LABEL org.label-schema.docker.cmd = "docker run -d --network=host daikin_exporter"
-
 RUN apt-get update -qq && apt-get -qqy install openssl && rm -rf /var/cache/apt/* /var/lib/apt/*
 
 COPY --from=builder /work/target/release/daikin_exporter /usr/local/bin/daikin_exporter

@@ -28,16 +28,23 @@ jobs:
         id: buildx
         with:
           install: true
+      - name: Docker metadata
+        uses: docker/metadata-action@v3
+        id: metadata
+        with:
+          images: drbrain/daikin_exporter
+          flavor: |
+            latest=auto
+          tags: |
+            type=semver,pattern={{version}}
       - name: Build and push
         uses: docker/build-push-action@v2
         with:
           push: true
           platforms: linux/amd64,linux/arm/v7
-          build-args: |
-            GITHUB_SHA=${{ github.sha }}
-          tags:
-            - "drbrain/daikin_exporter:latest"
-            - "drbrain/daikin_exporter:${{ steps.release_version.outputs.VERSION }}"
+          tags: ${{ steps.metadata.outputs.tags }}
+          labels: ${{ steps.metadata.outputs.labels }}
+
 
   github:
     name: Create GitHub release
