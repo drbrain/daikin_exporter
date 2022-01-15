@@ -36,8 +36,8 @@ jobs:
           build-args: |
             GITHUB_SHA=${{ github.sha }}
           tags:
-            - drbrain/daikin_exporter:latest
-            - drbrain/daikin_exporter:${{ steps.release_version.outputs.VERSION }}
+            - "drbrain/daikin_exporter:latest"
+            - "drbrain/daikin_exporter:${{ steps.release_version.outputs.VERSION }}"
 
   github:
     name: Create GitHub release
