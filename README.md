@@ -4,6 +4,29 @@ This prometheus exporter is for the Daikin BRP072A43 wifi adapter and similar
 wifi-enabled Daikin units that are supported by the Daikin ComfortControl
 application.
 
+## Docker
+
+There is a [docker image](https://hub.docker.com/r/drbrain/daikin_exporter) for
+this exporter:
+
+```
+docker run --rm -it --network=host docker.io/drbrain/daikin_exporter:latest
+```
+
+`daikin.docker.toml` is embedded as `/daikin.toml` in the image.  You can modify
+it to your liking and mount it atop the existing one.
+
+By default the `daikin_exporter` image needs host networking to discover daikin
+units through UDP broadcasts.  If you give your daikin units static IPs and
+configure the `hosts` entry in `daikin.toml`:
+
+```
+docker run --rm -it \
+  -p 9150:9150 \
+  --mount type=bind,source=/path/to/daikin.toml,target=/daikin.toml \
+  docker.io/drbrain/daikin_exporter:latest
+```
+
 ## Configuration
 
 You may provide a toml-format configuration file as the first argument to
@@ -49,20 +72,4 @@ frequent timeouts.
 
 Values are cached between refreshes so if a unit times-out stale data will be
 returned.
-
-## Docker
-
-There is a [docker image](https://hub.docker.com/r/drbrain/daikin_exporter) for
-this exporter.  Run it with:
-
-```
-docker run --rm -it --network=host daikin_exporter:latest
-```
-
-`daikin.docker.toml` is embedded as `/daikin.toml` in the image.  You can modify
-it to your liking and mount it atop the existing one.
-
-By default the `daikin_exporter` image needs host networking to discover daikin
-units through UDP broadcasts.  If you give your daikin units static IPs and
-configure the `hosts` entry in `daikin.toml`.
 
