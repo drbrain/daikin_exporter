@@ -46,3 +46,7 @@ jobs:
         with:
           command: build
           args: --all-features
+      - uses: actions/upload-artifact@v2
+        with:
+          name: daikin_exporter
+          path: target/debug/daikin_exporter
