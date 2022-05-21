@@ -96,7 +96,7 @@ lazy_static! {
     .unwrap();
     static ref FAN_RATE: IntGaugeVec = register_int_gauge_vec!(
         "daikin_fan_rate",
-        "Daikin fan rate (1 auto, 2 silence, 3–7 level 1–5)",
+        "Daikin fan rate (1 auto, 2 quiet, 3–7 level 1–5)",
         &["device"]
     )
     .unwrap();
