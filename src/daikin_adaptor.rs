@@ -27,7 +27,7 @@ type DaikinResponse = Result<Info, reqwest::Error>;
 
 macro_rules! set_metric {
     ( $metric:ident, $value:ident, $parse:ty, $device_name:ident) => {
-        if let Ok(v) = $value.parse::<$parse>() {
+        if let Ok(v) = $value.to_string().parse::<$parse>() {
             $metric.with_label_values(&[&$device_name]).set(v);
         } else {
             let desc = $metric.desc()[0];
@@ -209,9 +209,9 @@ impl DaikinAdaptor {
 
             self.device_name = Some(device_name.clone());
 
-            let power_on = basic_info.get("pow").unwrap().to_string();
-
-            set_metric!(POWER_ON, power_on, i64, device_name);
+            if let Some(power_on) = basic_info.get("pow") {
+                set_metric!(POWER_ON, power_on, i64, device_name);
+            }
         }
 
         let device_name = match &self.device_name {
@@ -224,26 +224,32 @@ impl DaikinAdaptor {
         };
 
         if let Some(control_info) = self.get_info(client, "aircon/get_control_info").await {
-            let set_temp = control_info.get("stemp").unwrap().to_string();
-            let set_humid = control_info.get("shum").unwrap().to_string();
-            let mode = control_info.get("mode").unwrap().to_string();
-            let fan_rate = control_info.get("f_rate").unwrap().to_string();
+            if let Some(set_temp) = control_info.get("stemp") {
+                set_metric!(SET_TEMP, set_temp, f64, device_name);
+            }
 
-            let fan_rate = if fan_rate == "A" {
-                1
-            } else if fan_rate == "B" {
-                2
-            } else {
-                fan_rate.parse::<i64>().unwrap()
-            };
+            if let Some(set_humid) = control_info.get("shum") {
+                set_metric!(SET_HUMID, set_humid, i64, device_name);
+            }
 
-            let fan_dir = control_info.get("f_dir").unwrap().to_string();
+            if let Some(mode) = control_info.get("mode") {
+                set_metric!(MODE, mode, i64, device_name);
+            }
 
-            set_metric!(MODE, mode, i64, device_name);
-            set_metric!(SET_TEMP, set_temp, f64, device_name);
-            set_metric!(SET_HUMID, set_humid, i64, device_name);
-            FAN_RATE.with_label_values(&[device_name]).set(fan_rate);
-            set_metric!(FAN_DIR, fan_dir, i64, device_name);
+            if let Some(fan_rate) = control_info.get("f_rate") {
+                let fan_rate = fan_rate.to_string();
+                let fan_rate = match fan_rate.as_str() {
+                   "A" => 1,
+                   "B" => 2,
+                   _ => fan_rate.parse::<i64>().unwrap()
+                };
+
+                FAN_RATE.with_label_values(&[device_name]).set(fan_rate);
+            }
+
+            if let Some(fan_dir) = control_info.get("f_dir") {
+                set_metric!(FAN_DIR, fan_dir, i64, device_name);
+            }
         }
 
         if let Some(sensor_info) = self.get_info(client, "aircon/get_sensor_info").await {
